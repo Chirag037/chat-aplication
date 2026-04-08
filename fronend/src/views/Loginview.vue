@@ -132,14 +132,14 @@ input {
 
 input:focus {
   outline: none;
-  border-color: #4CAF50;
+  border-color: #41a8c7;
   box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.1);
 }
 
 .btn {
   width: 100%;
   padding: 0.75rem;
-  background: #4CAF50;
+  background: #a5dde7;
   color: white;
   border: none;
   border-radius: 4px;
