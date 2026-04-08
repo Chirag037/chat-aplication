@@ -92,11 +92,11 @@ export default {
   justify-content: center;
   align-items: center;
   min-height: 100vh;
-  background-color: #f5f7fa;
+  background-color: rgb(214, 211, 211);
 }
 
 .card {
-  background: white;
+  background: rgb(247, 246, 245);
   padding: 2rem;
   border-radius: 8px;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
@@ -132,7 +132,7 @@ input {
 
 input:focus {
   outline: none;
-  border-color: #41a8c7;
+  border-color: blue;
   box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.1);
 }
 

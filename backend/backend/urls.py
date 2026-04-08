@@ -16,11 +16,16 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
-from chat.views import health_check, register, login, messages
+from chat.views import health_check, register, login, messages, list_users, room_list, create_direct_room, list_group_rooms, join_group_room
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/health/', health_check),
     path('api/register/', register),
     path('api/login/', login),
     path('api/messages/', messages),
+    path('api/users/', list_users),
+    path('api/rooms/', room_list),
+    path('api/rooms/direct/', create_direct_room),
+    path('api/rooms/group/', list_group_rooms),
+    path('api/rooms/join/', join_group_room),
 ]

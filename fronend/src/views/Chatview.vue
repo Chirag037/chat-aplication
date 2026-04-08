@@ -1,62 +1,97 @@
 <template>
-  <div class="chat-container">
-    <div class="chat-header">
-      <h2>Room: {{ roomName }}</h2>
-      <div class="user-info">
-        <span>Logged in as: <strong>{{ currentUser }}</strong></span>
-        <button @click="logout" class="logout-btn">Logout</button>
-      </div>
-    </div>
-
-    <div class="message-display" ref="messageWindow">
-      <div 
-        v-for="msg in messages" 
-        :key="msg.id" 
-        :class="['message-item', msg.username === currentUser ? 'sent' : 'received']"
-      >
-        <div class="message-bubble">
-          <strong class="msg-user">{{ msg.username }}</strong> 
-          <p class="msg-content">{{ msg.content }}</p>
-          <small class="timestamp">{{ formatTime(msg.created_at) }}</small>
+  <div class="main-layout">
+    <Sidebar :activeRoomId="roomId" @select-room="handleRoomSelect" />
+    
+    <div class="chat-container">
+      <div class="chat-header">
+        <h2>{{ currentRoomName }}</h2>
+        <div class="user-info">
+          <span>Logged in as: <strong>{{ currentUser }}</strong></span>
+          <button @click="logout" class="logout-btn">Logout</button>
         </div>
       </div>
-      <div v-if="messages.length === 0" class="no-messages">
-        No messages yet. Start the conversation!
-      </div>
-    </div>
 
-    <div class="input-area">
-      <input 
-        v-model="newMessage" 
-        @keyup.enter="sendMessage" 
-        placeholder="Type a message..." 
-        type="text"
-        :disabled="sending"
-      />
-      <button @click="sendMessage" :disabled="!newMessage.trim() || sending">
-        {{ sending ? 'Sending...' : 'Send' }}
-      </button>
+      <div class="message-display" ref="messageWindow">
+        <div 
+          v-for="msg in messages" 
+          :key="msg.id" 
+          :class="['message-item', msg.username === currentUser ? 'sent' : 'received']"
+        >
+          <div class="message-bubble">
+            <strong class="msg-user" v-if="msg.username !== currentUser">{{ msg.username }}</strong> 
+            <p class="msg-content">{{ msg.content }}</p>
+            <small class="timestamp">{{ formatTime(msg.created_at) }}</small>
+          </div>
+        </div>
+        <div v-if="!roomId" class="no-messages">
+          Select a conversation to start chatting!
+        </div>
+        <div v-else-if="messages.length === 0" class="no-messages">
+          No messages yet. Start the conversation!
+        </div>
+      </div>
+
+      <div class="input-area" v-if="roomId">
+        <input 
+          v-model="newMessage" 
+          @keyup.enter="sendMessage" 
+          placeholder="Type a message..." 
+          type="text"
+          :disabled="sending"
+        />
+        <button @click="sendMessage" :disabled="!newMessage.trim() || sending">
+          {{ sending ? 'Sending...' : 'Send' }}
+        </button>
+      </div>
     </div>
   </div>
 </template>
 
 <script>
 import api from '../api';
+import Sidebar from '../components/Sidebar.vue';
 
 export default {
+  components: { Sidebar },
   data() {
     return {
-      roomName: "General",
       messages: [],
       newMessage: "",
       currentUser: localStorage.getItem('username') || "Guest",
       pollingInterval: null,
       sending: false,
-      roomId: this.$route.params.id || '1' // Default to room 1
+      roomId: localStorage.getItem('last_room_id') || null,
+      currentRoomName: "Select a Chat"
     };
   },
   methods: {
+    async handleRoomSelect(id) {
+      this.roomId = id;
+      localStorage.setItem('last_room_id', id);
+      this.fetchMessages();
+
+      // Fetch room name from both group and direct rooms
+      try {
+        const [groupRes, directRes] = await Promise.all([
+          api.get('/api/rooms/group/'),
+          api.get('/api/rooms/')
+        ]);
+        const allRooms = [...groupRes.data, ...directRes.data];
+        const room = allRooms.find(r => r.id == id);
+        if (room) {
+          if (room.type === 'direct') {
+            const other = room.participants.find(p => p.username !== this.currentUser);
+            this.currentRoomName = other ? `@ ${other.username}` : 'Direct Chat';
+          } else {
+            this.currentRoomName = `# ${room.name || `Room ${room.id}`}`;
+          }
+        }
+      } catch (e) {
+        console.error('Error updating room name:', e);
+      }
+    },
     async fetchMessages() {
+      if (!this.roomId) return;
       try {
         const response = await api.get(`/api/messages/?room_id=${this.roomId}`);
         this.messages = response.data;
@@ -73,7 +108,7 @@ export default {
     },
 
     async sendMessage() {
-      if (!this.newMessage.trim() || this.sending) return;
+      if (!this.newMessage.trim() || this.sending || !this.roomId) return;
 
       this.sending = true;
       const payload = {
@@ -108,18 +143,20 @@ export default {
     logout() {
       localStorage.removeItem('access_token');
       localStorage.removeItem('username');
+      localStorage.removeItem('last_room_id');
       this.$router.push('/login');
     }
   },
 
-  mounted() {
-    // Check for auth
+  async mounted() {
     if (!localStorage.getItem('access_token')) {
       this.$router.push('/login');
       return;
     }
-    
-    this.fetchMessages();
+
+    if (this.roomId) {
+      this.fetchMessages();
+    }
     this.pollingInterval = setInterval(this.fetchMessages, 3000);
   },
 
@@ -132,15 +169,20 @@ export default {
 </script>
 
 <style scoped>
+.main-layout {
+  display: flex;
+  height: 100vh;
+  background: #f5f7fa;
+}
+
 .chat-container {
-  max-width: 800px;
-  margin: 20px auto;
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+  flex: 1;
   display: flex;
   flex-direction: column;
-  height: 80vh;
+  background: white;
+  margin: 10px;
+  border-radius: 12px;
+  box-shadow: 0 5px 15px rgba(0,0,0,0.05);
   overflow: hidden;
 }
 
@@ -170,10 +212,6 @@ export default {
   font-size: 0.8rem;
 }
 
-.logout-btn:hover {
-  background: rgba(255,255,255,0.3);
-}
-
 .message-display {
   flex: 1;
   padding: 2rem;
@@ -181,7 +219,7 @@ export default {
   background: #f9f9f9;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.8rem;
 }
 
 .message-item {
@@ -199,25 +237,24 @@ export default {
 
 .message-bubble {
   max-width: 70%;
-  padding: 0.8rem 1.2rem;
-  border-radius: 18px;
-  position: relative;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+  padding: 0.6rem 1rem;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
 }
 
 .sent .message-bubble {
   background: #dcf8c6;
-  border-bottom-right-radius: 4px;
+  border-bottom-right-radius: 2px;
 }
 
 .received .message-bubble {
   background: white;
-  border-bottom-left-radius: 4px;
+  border-bottom-left-radius: 2px;
 }
 
 .msg-user {
   display: block;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   color: #666;
   margin-bottom: 0.2rem;
 }
@@ -225,25 +262,26 @@ export default {
 .msg-content {
   margin: 0;
   word-wrap: break-word;
+  font-size: 0.95rem;
 }
 
 .timestamp {
   display: block;
-  font-size: 0.65rem;
+  font-size: 0.6rem;
   color: #999;
   text-align: right;
-  margin-top: 0.3rem;
+  margin-top: 0.2rem;
 }
 
 .no-messages {
   text-align: center;
   color: #999;
-  margin-top: 2rem;
+  margin-top: 4rem;
   font-style: italic;
 }
 
 .input-area {
-  padding: 1.5rem 2rem;
+  padding: 1rem 2rem;
   background: white;
   border-top: 1px solid #eee;
   display: flex;
@@ -252,11 +290,10 @@ export default {
 
 input {
   flex: 1;
-  padding: 0.8rem 1.2rem;
-  border: 2px solid #f0f0f0;
+  padding: 0.7rem 1.2rem;
+  border: 1px solid #ddd;
   border-radius: 25px;
   outline: none;
-  transition: border-color 0.2s;
 }
 
 input:focus {
@@ -264,18 +301,13 @@ input:focus {
 }
 
 button {
-  padding: 0.8rem 1.5rem;
+  padding: 0.7rem 1.5rem;
   background: #4CAF50;
   color: white;
   border: none;
   border-radius: 25px;
   font-weight: bold;
   cursor: pointer;
-  transition: opacity 0.2s;
-}
-
-button:hover:not(:disabled) {
-  opacity: 0.9;
 }
 
 button:disabled {
