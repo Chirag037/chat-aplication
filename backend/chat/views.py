@@ -69,7 +69,7 @@ def room_list(request):
     rooms = Room.objects.filter(participants=request.user, type='direct')
     serializer = RoomSerializer(rooms, many=True)
     return Response(serializer.data)
-
+    
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def list_group_rooms(request):
