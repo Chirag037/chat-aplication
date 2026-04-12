@@ -1,5 +1,6 @@
 from pathlib import Path
 import os
+import shutil
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -24,6 +25,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -70,22 +72,28 @@ TIME_ZONE = 'UTC'
 USE_I18N = True
 USE_TZ = True
 
-# Static files (CSS, JavaScript, Images)
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-# Serve Vue frontend from dist folder
-STATICFILES_DIRS = [
-    BASE_DIR.parent / 'fronend' / 'dist',
-]
+fronend_dist = BASE_DIR.parent / 'fronend' / 'dist'
+staticfiles_assets = BASE_DIR / 'staticfiles' / 'assets'
+
+if fronend_dist.exists():
+    staticfiles_assets.parent.mkdir(parents=True, exist_ok=True)
+    if not staticfiles_assets.exists():
+        staticfiles_assets.mkdir(parents=True, exist_ok=True)
+    for item in fronend_dist.glob('assets/*'):
+        if item.is_file():
+            try:
+                shutil.copy(item, staticfiles_assets / item.name)
+            except Exception as e:
+                print(f"Could not copy {item}: {e}")
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# CORS Settings
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
 
-# REST Framework Settings
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
@@ -95,7 +103,6 @@ REST_FRAMEWORK = {
     ),
 }
 
-# JWT Settings
 from datetime import timedelta
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(days=7),
