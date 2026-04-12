@@ -1,7 +1,3 @@
-"""
-URL configuration for backend project.
-Serves Vue frontend + Django API
-"""
 from django.contrib import admin
 from django.urls import path
 from django.views.generic import TemplateView
@@ -11,8 +7,6 @@ from chat.views import health_check, register, login, messages, list_users, room
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    
-    # API endpoints
     path('api/health/', health_check),
     path('api/register/', register),
     path('api/login/', login),
@@ -22,11 +16,11 @@ urlpatterns = [
     path('api/rooms/direct/', create_direct_room),
     path('api/rooms/group/', list_group_rooms),
     path('api/rooms/join/', join_group_room),
-    
-    # Serve Vue frontend for all other routes (catch-all)
     path('', TemplateView.as_view(template_name='index.html')),
     path('<path:rest>', TemplateView.as_view(template_name='index.html')),
 ]
 
-# Always serve static files
-urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+if settings.DEBUG:
+    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+else:
+    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
