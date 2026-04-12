@@ -1,24 +1,18 @@
 """
 URL configuration for backend project.
-
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/6.0/topics/http/urls/
-Examples:
-Function views
-    1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  path('', views.home, name='home')
-Class-based views
-    1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
-Including another URLconf
-    1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
+Serves Vue frontend + Django API
 """
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import path
+from django.views.generic import TemplateView
+from django.conf import settings
+from django.conf.urls.static import static
 from chat.views import health_check, register, login, messages, list_users, room_list, create_direct_room, list_group_rooms, join_group_room
+
 urlpatterns = [
     path('admin/', admin.site.urls),
+    
+    # API endpoints
     path('api/health/', health_check),
     path('api/register/', register),
     path('api/login/', login),
@@ -28,4 +22,12 @@ urlpatterns = [
     path('api/rooms/direct/', create_direct_room),
     path('api/rooms/group/', list_group_rooms),
     path('api/rooms/join/', join_group_room),
+    
+    # Serve Vue frontend for all other routes (catch-all)
+    path('', TemplateView.as_view(template_name='index.html')),
+    path('<path:rest>', TemplateView.as_view(template_name='index.html')),
 ]
+
+# Serve static files
+if settings.DEBUG:
+    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
