@@ -37,7 +37,7 @@ ROOT_URLCONF = 'backend.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [BASE_DIR.parent / 'frontend' / 'dist'],
+        'DIRS': [BASE_DIR.parent / 'fronend' / 'dist'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -76,7 +76,7 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # Serve Vue frontend from dist folder
 STATICFILES_DIRS = [
-    BASE_DIR.parent / 'frontend' / 'dist',
+    BASE_DIR.parent / 'fronend' / 'dist',
 ]
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
