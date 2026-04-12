@@ -7,7 +7,6 @@ from chat.views import health_check, register, login, messages, list_users, room
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    
     path('api/health/', health_check),
     path('api/register/', register),
     path('api/login/', login),
@@ -17,13 +16,11 @@ urlpatterns = [
     path('api/rooms/direct/', create_direct_room),
     path('api/rooms/group/', list_group_rooms),
     path('api/rooms/join/', join_group_room),
-    
-    path('', TemplateView.as_view(template_name='index.html'), name='home'),
 ]
 
-urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+if settings.DEBUG:
+    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
 
 urlpatterns += [
-    re_path(r'^(?!assets/).*/$', TemplateView.as_view(template_name='index.html')),
-    re_path(r'^(?!assets/)', TemplateView.as_view(template_name='index.html')),
+    re_path(r'^(?!api|admin|static).*', TemplateView.as_view(template_name='index.html')),
 ]
