@@ -1,6 +1,5 @@
 from pathlib import Path
 import os
-import shutil
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -25,7 +24,6 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -74,20 +72,6 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-
-fronend_dist = BASE_DIR.parent / 'fronend' / 'dist'
-staticfiles_assets = BASE_DIR / 'staticfiles' / 'assets'
-
-if fronend_dist.exists():
-    staticfiles_assets.parent.mkdir(parents=True, exist_ok=True)
-    if not staticfiles_assets.exists():
-        staticfiles_assets.mkdir(parents=True, exist_ok=True)
-    for item in fronend_dist.glob('assets/*'):
-        if item.is_file():
-            try:
-                shutil.copy(item, staticfiles_assets / item.name)
-            except Exception as e:
-                print(f"Could not copy {item}: {e}")
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
