@@ -32,33 +32,73 @@ class ChatConsumer(AsyncWebsocketConsumer):
     # Receive message from WebSocket
     async def receive(self, text_data):
         data = json.loads(text_data)
-        message_content = data.get('message')
+        action = data.get('action', 'send')
         username = data.get('username')
 
-        if not message_content or not username:
-            return
+        if not username: return
 
-        # Save message to database
-        saved_msg = await self.save_message(username, self.room_id, message_content)
+        if action == 'send':
+            message_content = data.get('message')
+            if not message_content: return
+            saved_msg = await self.save_message(username, self.room_id, message_content)
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'chat_message',
+                    'message': message_content,
+                    'username': username,
+                    'created_at': saved_msg['created_at'],
+                    'id': saved_msg['id']
+                }
+            )
+        
+        elif action == 'delete':
+            msg_id = data.get('message_id')
+            if await self.delete_message(username, msg_id):
+                await self.channel_layer.group_send(
+                    self.room_group_name,
+                    {
+                        'type': 'message_deleted',
+                        'message_id': msg_id
+                    }
+                )
 
-        # Send message to room group
-        await self.channel_layer.group_send(
-            self.room_group_name,
-            {
-                'type': 'chat_message',
-                'message': message_content,
-                'username': username,
-                'created_at': saved_msg['created_at']
-            }
-        )
+        elif action == 'edit':
+            msg_id = data.get('message_id')
+            new_content = data.get('message')
+            if await self.edit_message(username, msg_id, new_content):
+                await self.channel_layer.group_send(
+                    self.room_group_name,
+                    {
+                        'type': 'message_edited',
+                        'message_id': msg_id,
+                        'message': new_content
+                    }
+                )
 
-    # Receive message from room group
+    # Handlers for Group Events
     async def chat_message(self, event):
-        # Send message to WebSocket
         await self.send(text_data=json.dumps({
+            'type': 'message',
             'content': event['message'],
             'username': event['username'],
             'created_at': event['created_at'],
+            'id': event['id'],
+            'room': self.room_id
+        }))
+
+    async def message_deleted(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'delete',
+            'message_id': event['message_id'],
+            'room': self.room_id
+        }))
+
+    async def message_edited(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'edit',
+            'message_id': event['message_id'],
+            'content': event['message'],
             'room': self.room_id
         }))
 
@@ -71,3 +111,22 @@ class ChatConsumer(AsyncWebsocketConsumer):
             'id': msg.id,
             'created_at': msg.created_at.isoformat()
         }
+
+    @database_sync_to_async
+    def delete_message(self, username, msg_id):
+        try:
+            msg = Message.objects.get(id=msg_id, user__username=username)
+            msg.delete()
+            return True
+        except Message.DoesNotExist:
+            return False
+
+    @database_sync_to_async
+    def edit_message(self, username, msg_id, content):
+        try:
+            msg = Message.objects.get(id=msg_id, user__username=username)
+            msg.content = content
+            msg.save()
+            return True
+        except Message.DoesNotExist:
+            return False
