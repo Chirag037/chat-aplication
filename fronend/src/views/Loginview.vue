@@ -1,29 +1,120 @@
 <template>
-  <div class="container">
-    <div class="card">
-      <h2>{{ isLogin ? 'Login' : 'Register' }}</h2>
-      
-      <form @submit.prevent="submit">
-        <div class="input-group">
-          <label>Username</label>
-          <input v-model="username" placeholder="Enter username" required />
-        </div>
+  <div class="min-h-screen flex items-center justify-center bg-gray-900 relative overflow-hidden font-sans">
+    <!-- Subtle Professional Background -->
+    <div class="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(17,24,39,1)_0%,rgba(15,23,42,1)_100%)]"></div>
+    <div class="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
+
+    <div class="relative z-10 w-full px-4 py-8 flex justify-center">
+      <div class="w-full max-w-md bg-slate-800/50 backdrop-blur-xl border border-white/5 rounded-2xl shadow-2xl p-8 md:p-10 transition-all duration-300">
         
-        <div class="input-group">
-          <label>Password</label>
-          <input v-model="password" type="password" placeholder="Enter password" required />
+        <!-- Header -->
+        <div class="text-center mb-8">
+          <div class="inline-flex items-center justify-center w-14 h-14 bg-indigo-600 rounded-xl shadow-lg mb-4">
+            <span class="text-white text-2xl font-bold">C</span>
+          </div>
+          <h2 class="text-2xl font-bold text-white tracking-tight">
+            {{ isLogin ? 'Sign In' : 'Create Account' }}
+          </h2>
+          <p class="text-slate-400 mt-2 text-sm font-medium">
+            {{ isLogin ? 'Access your workspace' : 'Get started with your new account' }}
+          </p>
         </div>
 
-        <button type="submit" :disabled="loading" class="btn">
-          {{ loading ? 'Processing...' : (isLogin ? 'Login' : 'Register') }}
-        </button>
-      </form>
+        <!-- Form -->
+        <form @submit.prevent="submit" class="space-y-5">
+          <div>
+            <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 ml-1">Username</label>
+            <div class="relative group">
+              <input 
+                v-model="username" 
+                type="text"
+                placeholder="Enter your username" 
+                required 
+                class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder-gray-500 outline-none focus:border-purple-500 focus:ring-4 focus:ring-purple-500/10 transition-all duration-300"
+              />
+            </div>
+          </div>
+          
+          <div>
+            <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 ml-1">Password</label>
+            <div class="relative group">
+              <input 
+                v-model="password" 
+                type="password" 
+                placeholder="••••••••" 
+                required 
+                class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder-gray-500 outline-none focus:border-purple-500 focus:ring-4 focus:ring-purple-500/10 transition-all duration-300"
+              />
+            </div>
+          </div>
 
-      <p @click="isLogin = !isLogin" class="toggle-link">
-        {{ isLogin ? "Don't have an account? Register" : "Already have an account? Login" }}
-      </p>
+          <!-- Repeat Password (only for register) -->
+          <transition 
+            enter-active-class="transition-all duration-300 ease-out"
+            enter-from-class="opacity-0 -translate-y-4"
+            enter-to-class="opacity-100 translate-y-0"
+            leave-active-class="transition-all duration-200 ease-in"
+            leave-from-class="opacity-100 translate-y-0"
+            leave-to-class="opacity-0 -translate-y-4"
+          >
+            <div v-if="!isLogin">
+              <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 ml-1">Repeat Password</label>
+              <div class="relative group">
+                <input 
+                  v-model="confirmPassword" 
+                  type="password" 
+                  placeholder="••••••••" 
+                  required 
+                  class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder-gray-500 outline-none focus:border-purple-500 focus:ring-4 focus:ring-purple-500/10 transition-all duration-300"
+                />
+              </div>
+            </div>
+          </transition>
 
-      <p v-if="message" :class="['message', messageType]">{{ message }}</p>
+          <button 
+            type="submit" 
+            :disabled="loading" 
+            class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-3.5 rounded-xl shadow-md transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed mt-4"
+          >
+            <span v-if="!loading">{{ isLogin ? 'Sign In' : 'Sign Up' }}</span>
+            <div v-else class="flex items-center justify-center">
+              <svg class="animate-spin h-5 w-5 text-white mr-3" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Processing...
+            </div>
+          </button>
+        </form>
+
+        <!-- Toggle Button -->
+        <div class="mt-8 text-center">
+          <p class="text-gray-400 text-sm">
+            {{ isLogin ? "New here?" : "Joined us before?" }}
+            <button 
+              @click="toggleMode" 
+              class="text-purple-400 font-bold hover:text-purple-300 transition-colors duration-200 ml-1"
+            >
+              {{ isLogin ? 'Create an account' : 'Sign in to your account' }}
+            </button>
+          </p>
+        </div>
+
+        <!-- Notification Message -->
+        <transition name="fade">
+          <div 
+            v-if="message" 
+            :class="[
+              'mt-6 p-4 rounded-xl text-center text-sm font-medium border flex items-center justify-center gap-2', 
+              messageType === 'success' ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'
+            ]"
+          >
+            <span v-if="messageType === 'success'">✓</span>
+            <span v-else>⚠️</span>
+            {{ message }}
+          </div>
+        </transition>
+      </div>
     </div>
   </div>
 </template>
@@ -36,6 +127,7 @@ export default {
     return {
       username: '',
       password: '',
+      confirmPassword: '',
       message: '',
       messageType: 'error',
       isLogin: true,
@@ -43,9 +135,23 @@ export default {
     }
   },
   methods: {
+    toggleMode() {
+      this.isLogin = !this.isLogin;
+      this.message = '';
+      this.password = '';
+      this.confirmPassword = '';
+    },
     async submit() {
+      // Basic validation
       if (!this.username || !this.password) {
-        this.message = 'Please fill in all fields'
+        this.message = 'Please fill in all required fields'
+        this.messageType = 'error'
+        return
+      }
+
+      // Password confirmation check
+      if (!this.isLogin && this.password !== this.confirmPassword) {
+        this.message = 'Passwords do not match'
         this.messageType = 'error'
         return
       }
@@ -60,23 +166,22 @@ export default {
           password: this.password,
         })
 
-        // Save token to browser storage
         if (response.data.access) {
           localStorage.setItem('access_token', response.data.access)
           localStorage.setItem('username', this.username)
         }
 
-        this.message = response.data.message || (this.isLogin ? 'Login successful!' : 'Account created!')
+        this.message = response.data.message || (this.isLogin ? 'Successfully logged in!' : 'Welcome! Account created.')
         this.messageType = 'success'
 
-        // Redirect after a short delay
+        // Success redirection
         setTimeout(() => {
           this.$router.push('/chat')
-        }, 1000)
+        }, 1200)
 
       } catch (error) {
         console.error('Submission error:', error)
-        this.message = error.response?.data?.error || error.response?.data?.message || 'Something went wrong. Please try again.'
+        this.message = error.response?.data?.error || error.response?.data?.message || 'Connection lost. Please try again.'
         this.messageType = 'error'
       } finally {
         this.loading = false
@@ -87,105 +192,10 @@ export default {
 </script>
 
 <style scoped>
-.container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: 100vh;
-  background-color: rgb(214, 211, 211);
+.fade-enter-active, .fade-leave-active {
+  transition: opacity 0.5s ease;
 }
-
-.card {
-  background: rgb(247, 246, 245);
-  padding: 2rem;
-  border-radius: 8px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  width: 100%;
-  max-width: 400px;
-}
-
-h2 {
-  text-align: center;
-  margin-bottom: 1.5rem;
-  color: #333;
-}
-
-.input-group {
-  margin-bottom: 1rem;
-}
-
-label {
-  display: block;
-  margin-bottom: 0.5rem;
-  font-size: 0.9rem;
-  color: #666;
-}
-
-input {
-  width: 100%;
-  padding: 0.75rem;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 1rem;
-  box-sizing: border-box;
-}
-
-input:focus {
-  outline: none;
-  border-color: blue;
-  box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.1);
-}
-
-.btn {
-  width: 100%;
-  padding: 0.75rem;
-  background: #a5dde7;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 1rem;
-  font-weight: bold;
-  transition: background 0.2s;
-  margin-top: 1rem;
-}
-
-.btn:hover:not(:disabled) {
-  background: #45a049;
-}
-
-.btn:disabled {
-  background: #ccc;
-  cursor: not-allowed;
-}
-
-.toggle-link {
-  text-align: center;
-  margin-top: 1rem;
-  cursor: pointer;
-  color: #2196F3;
-  font-size: 0.9rem;
-}
-
-.toggle-link:hover {
-  text-decoration: underline;
-}
-
-.message {
-  margin-top: 1rem;
-  padding: 0.75rem;
-  border-radius: 4px;
-  text-align: center;
-  font-size: 0.9rem;
-}
-
-.error {
-  background-color: #ffebee;
-  color: #c62828;
-}
-
-.success {
-  background-color: #e8f5e9;
-  color: #2e7d32;
+.fade-enter-from, .fade-leave-to {
+  opacity: 0;
 }
 </style>
