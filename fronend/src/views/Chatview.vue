@@ -56,19 +56,51 @@
             </span>
           </div>
 
-          <!-- Bubble -->
-          <div 
-            :class="[
-              'px-5 py-3 shadow-sm transition-all duration-300 text-sm leading-relaxed',
-              msg.username === currentUser 
-                ? 'bg-green-100 text-green-900 rounded-xl rounded-tr-none border border-green-200' 
-                : 'bg-blue-100 text-blue-900 rounded-xl rounded-tl-none border border-blue-200'
-            ]"
-          >
-            <p class="whitespace-pre-wrap">{{ msg.content }}</p>
-            <div :class="['mt-1.5 flex items-center gap-1 text-[9px] font-medium', msg.username === currentUser ? 'text-green-600' : 'text-blue-600']">
-              {{ formatTime(msg.created_at) }}
-              <span v-if="msg.username === currentUser">· Delivered</span>
+          <!-- Bubble Container -->
+          <div class="group relative flex items-center">
+            <!-- Edit/Delete Actions (Left side for sent messages) -->
+            <div v-if="msg.username === currentUser && editingMessageId !== msg.id" class="hidden group-hover:flex items-center gap-1 mr-2 bg-white/10 backdrop-blur-md border border-white/10 rounded-lg p-1 transition-all duration-200">
+              <button @click="startEdit(msg)" class="p-1 hover:bg-white/20 rounded transition-colors" title="Edit message">
+                <svg class="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+              </button>
+              <button @click="deleteMessage(msg.id)" class="p-1 hover:bg-red-500/20 rounded transition-colors" title="Delete message">
+                <svg class="w-3 h-3 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+              </button>
+            </div>
+
+            <!-- Bubble Content -->
+            <div 
+              :class="[
+                'px-5 py-3 shadow-sm transition-all duration-300 text-sm leading-relaxed min-w-[60px]',
+                msg.username === currentUser 
+                  ? 'bg-green-100 text-green-900 rounded-xl rounded-tr-none border border-green-200' 
+                  : 'bg-blue-100 text-blue-900 rounded-xl rounded-tl-none border border-blue-200'
+              ]"
+            >
+              <!-- Normal View -->
+              <div v-if="editingMessageId !== msg.id">
+                <p class="whitespace-pre-wrap">{{ msg.content }}</p>
+                <div :class="['mt-1.5 flex items-center gap-1 text-[9px] font-medium', msg.username === currentUser ? 'text-green-600' : 'text-blue-600']">
+                  {{ formatTime(msg.created_at) }}
+                  <span v-if="msg.username === currentUser">· Delivered</span>
+                  <span v-if="msg.is_edited" class="italic">· Edited</span>
+                </div>
+              </div>
+
+              <!-- Inline Edit View -->
+              <div v-else class="flex flex-col gap-2 min-w-[200px]">
+                <textarea 
+                  v-model="editingContent" 
+                  class="w-full bg-white/50 border border-green-300 rounded-lg p-2 text-sm text-green-900 outline-none focus:ring-2 focus:ring-green-400 resize-none"
+                  rows="2"
+                  @keyup.esc="cancelEdit"
+                  @keyup.enter.exact.prevent="saveEdit"
+                ></textarea>
+                <div class="flex justify-end gap-2">
+                  <button @click="cancelEdit" class="text-[10px] font-bold text-slate-500 uppercase tracking-widest hover:text-slate-700">Cancel</button>
+                  <button @click="saveEdit" class="text-[10px] font-bold text-green-600 uppercase tracking-widest hover:text-green-800">Save</button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -132,7 +164,9 @@ export default {
       roomId: localStorage.getItem('last_room_id') || null,
       currentRoomName: "Select Workspace",
       isSidebarOpen: false,
-      socket: null
+      socket: null,
+      editingMessageId: null,
+      editingContent: ""
     };
   },
   methods: {
@@ -178,14 +212,22 @@ export default {
       this.socket.onmessage = (e) => {
         const data = JSON.parse(e.data);
         if (data && data.room == this.roomId) {
-          if (data.username !== this.currentUser) {
+          if (data.type === 'message' && data.username !== this.currentUser) {
              this.messages.push({
                username: data.username,
                content: data.content,
                created_at: data.created_at,
-               id: Date.now()
+               id: data.id || Date.now()
              });
              this.$nextTick(this.scrollToBottom);
+          } else if (data.type === 'delete') {
+             this.messages = this.messages.filter(m => m.id !== data.message_id);
+          } else if (data.type === 'edit') {
+             const msg = this.messages.find(m => m.id === data.message_id);
+             if (msg) {
+               msg.content = data.content;
+               msg.is_edited = true;
+             }
           }
         }
       };
@@ -215,16 +257,10 @@ export default {
       try {
         if (this.socket && this.socket.readyState === WebSocket.OPEN) {
           this.socket.send(JSON.stringify({
+            'action': 'send',
             'message': this.newMessage,
             'username': this.currentUser
           }));
-          
-          this.messages.push({
-            username: this.currentUser,
-            content: this.newMessage,
-            created_at: new Date().toISOString(),
-            id: Date.now()
-          });
           
           this.newMessage = "";
           this.$nextTick(this.scrollToBottom);
@@ -238,6 +274,50 @@ export default {
         console.error("Link error:", error);
       } finally {
         this.sending = false;
+      }
+    },
+
+    deleteMessage(id) {
+      if (!confirm("Are you sure you want to delete this message?")) return;
+      if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+        this.socket.send(JSON.stringify({
+          'action': 'delete',
+          'message_id': id,
+          'username': this.currentUser
+        }));
+        // Remove locally immediately for better UX
+        this.messages = this.messages.filter(m => m.id !== id);
+      }
+    },
+
+    startEdit(msg) {
+      this.editingMessageId = msg.id;
+      this.editingContent = msg.content;
+    },
+
+    cancelEdit() {
+      this.editingMessageId = null;
+      this.editingContent = "";
+    },
+
+    async saveEdit() {
+      if (!this.editingContent.trim()) return;
+      if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+        this.socket.send(JSON.stringify({
+          'action': 'edit',
+          'message_id': this.editingMessageId,
+          'message': this.editingContent,
+          'username': this.currentUser
+        }));
+
+        // Update locally
+        const msg = this.messages.find(m => m.id === this.editingMessageId);
+        if (msg) {
+          msg.content = this.editingContent;
+          msg.is_edited = true;
+        }
+        
+        this.cancelEdit();
       }
     },
 
