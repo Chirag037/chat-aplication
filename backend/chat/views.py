@@ -155,3 +155,4 @@ def messages(request):
         msg = Message.objects.create(user=request.user, content=content, room=room)
         serializer = MessageSerializer(msg)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+        

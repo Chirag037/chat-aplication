@@ -1,4 +1,4 @@
-# Real-Time Professional Chat App
+ # Real-Time Professional Chat App
 
 A sleek, minimalist chat application designed for professional communication. Built with **Django Channels** and **Vue 3**.
 

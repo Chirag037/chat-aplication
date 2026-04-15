@@ -21,9 +21,7 @@
             <h2 class="text-sm font-bold text-slate-900 tracking-tight">{{ currentRoomName }}</h2>
             <div v-if="roomId" class="flex items-center gap-1.5 py-0.5">
               <span class="w-1 h-1 bg-slate-200 rounded-full"></span>
-              <span class="text-[9px] font-bold text-slate-400 uppercase tracking-[0.15em]">
-                {{ roomType === 'group' ? 'Channel' : 'Direct Message' }}
-              </span>
+              <span class="text-[9px] font-bold text-slate-400 uppercase tracking-[0.15em]">Direct Message</span>
             </div>
           </div>
         </div>
@@ -47,8 +45,6 @@
           v-for="(msg, index) in messages" 
           :key="msg.id || index" 
           :class="['flex flex-col w-full', msg.username === currentUser ? 'items-end' : 'items-start']"
-          :data-message-id="roomType === 'group' && msg.username !== currentUser ? msg.id : null"
-          @mouseenter="tryGroupMessageSeen(msg)"
         >
           <!-- Metadata -->
           <div class="flex items-center gap-2 mb-1 px-1 opacity-60">
@@ -84,20 +80,6 @@
               <!-- Normal View -->
               <div v-if="editingMessageId !== msg.id">
                 <p class="whitespace-pre-wrap">{{ msg.content }}</p>
-                <template v-if="roomType === 'group'">
-                  <div
-                    v-if="msg.seen_by && msg.seen_by.length"
-                    class="mt-2 text-[9px] font-medium text-slate-600"
-                  >
-                    Seen by {{ msg.seen_by.join(', ') }}
-                  </div>
-                  <div
-                    v-else-if="msg.username === currentUser"
-                    class="mt-2 text-[9px] text-slate-400 italic"
-                  >
-                    No reads yet
-                  </div>
-                </template>
                 <div class="mt-1.5 flex items-center justify-end gap-1.5 px-0.5">
                   <span class="text-[9px] font-medium opacity-60 uppercase tracking-tighter">
                     {{ formatTime(msg.created_at) }}
@@ -122,10 +104,15 @@
               </div>
             </div>
 
-            <!-- Status Icons (Moved Outside) -->
-            <div v-if="msg.username === currentUser" class="absolute -bottom-5 right-1 flex items-center h-4">
+            <!-- Status Icons & Seen By -->
+            <div v-if="msg.username === currentUser" class="absolute -bottom-5 right-1 flex items-center gap-2 h-4">
+              <!-- Seen By (Group rooms only) - Shown to the left of the icon -->
+              <span v-if="msg.seen_by && msg.seen_by.length > 0" class="text-[8px] text-blue-500 font-bold whitespace-nowrap">
+                Seen by {{ msg.seen_by.join(', ') }}
+              </span>
+
               <!-- Viewed (Blue Circle) -->
-              <div v-if="msg.status === 'viewed'" class="w-2 h-2 bg-blue-500 rounded-full shadow-[0_0_6px_rgba(59,130,246,0.6)] border border-blue-400"></div>
+              <div v-if="msg.status === 'viewed' || (msg.seen_by && msg.seen_by.length > 0)" class="w-2 h-2 bg-blue-500 rounded-full shadow-[0_0_6px_rgba(59,130,246,0.6)] border border-blue-400"></div>
               
               <!-- Delivered (Double Tick) -->
               <div v-else-if="msg.status === 'delivered'" class="flex -space-x-1.5 opacity-60">
@@ -203,21 +190,8 @@ export default {
       socket: null,
       notifySocket: null,
       editingMessageId: null,
-      editingContent: "",
-      roomType: null,
-      groupReadObserver: null,
-      seenTrackedMessageIds: {},
+      editingContent: ""
     };
-  },
-  watch: {
-    messages() {
-      if (this.roomType !== 'group') return;
-      this.$nextTick(() => this.setupGroupReadObserver());
-    },
-    roomType(val) {
-      if (val !== 'group') this.teardownGroupReadObserver();
-      else this.$nextTick(() => this.setupGroupReadObserver());
-    },
   },
   methods: {
     getInitial(name) {
@@ -226,13 +200,11 @@ export default {
     async handleRoomSelect(payload) {
       const room = typeof payload === 'object' ? payload : null;
       const id = room ? room.id : payload;
-
-      this.seenTrackedMessageIds = {};
-      this.roomType = room ? room.type : null;
+      
       this.roomId = id;
       localStorage.setItem('last_room_id', id);
       this.isSidebarOpen = false;
-      await this.fetchMessages();
+      this.fetchMessages();
       this.initWebSocket();
       
       if (room) {
@@ -252,7 +224,6 @@ export default {
           const allRooms = [...groupRes.data, ...directRes.data];
           const foundRoom = allRooms.find(r => r.id == id);
           if (foundRoom) {
-            this.roomType = foundRoom.type;
             if (foundRoom.type === 'direct') {
               const other = foundRoom.participants.find(p => p.username !== this.currentUser);
               this.currentRoomName = other ? other.username : 'Private Session';
@@ -281,11 +252,6 @@ export default {
             'username': this.currentUser
          }));
          this.markRoomAsRead();
-         // Observer may have fired before the socket was open; allow retries after connect.
-         if (this.roomType === 'group') {
-           this.seenTrackedMessageIds = {};
-           this.$nextTick(() => this.setupGroupReadObserver());
-         }
       };
 
       this.socket.onmessage = (e) => {
@@ -298,10 +264,9 @@ export default {
                created_at: data.created_at,
                id: data.id || Date.now(),
                status: data.status || 'sent',
-               seen_by: [],
                room_type: data.room_type,
+               seen_by: [],
              });
-             if (data.room_type) this.roomType = data.room_type;
              this.$nextTick(this.scrollToBottom);
           } else if (data.type === 'delete') {
              this.messages = this.messages.filter(m => m.id !== data.message_id);
@@ -316,23 +281,27 @@ export default {
              if (data.username !== this.currentUser) {
                this.messages.forEach(m => {
                  if (m.username === this.currentUser) {
-                    // If they 'viewed' it, flip to viewed
-                    if (data.status === 'viewed') {
+                    // Never downgrade: viewed > delivered > sent
+                    if (data.status === 'viewed' && m.status !== 'viewed') {
                       m.status = 'viewed';
                     } 
-                    // If they 'delivered' it, only update if it was 'sent'
                     else if (data.status === 'delivered' && m.status === 'sent') {
                       m.status = 'delivered';
                     }
                  }
                });
              }
-          } else if (data.type === 'read_receipt') {
-            const target = this.messages.find((m) => m.id == data.message_id);
-            if (target) {
-              target.seen_by = [...(data.seen_by || [])];
-            }
-          }
+           } else if (data.type === 'read_receipt') {
+             // Group room: update the specific message's seen_by list
+             const msg = this.messages.find(m => m.id === data.message_id);
+             if (msg) {
+               msg.seen_by = data.seen_by || [];
+               // If this is the sender's own message and someone else saw it, mark as viewed
+               if (msg.username === this.currentUser && msg.seen_by.length > 0) {
+                 msg.status = 'viewed';
+               }
+             }
+           }
         }
         
         // If we get a new message while in this room, mark it as read
@@ -363,22 +332,14 @@ export default {
 
       this.notifySocket.onclose = () => {
         this.notifySocket = null;
-        setTimeout(() => this.initNotificationSocket(), 3000);
+        setTimeout(this.initNotificationSocket, 3000);
       };
     },
     async fetchMessages() {
       if (!this.roomId) return;
       try {
         const response = await api.get(`/api/messages/?room_id=${this.roomId}`);
-        this.messages = response.data.map((m) => ({
-          ...m,
-          seen_by: Array.isArray(m.seen_by) ? m.seen_by : [],
-        }));
-        if (this.messages.length) {
-          this.roomType = this.messages[0].room_type;
-        } else {
-          await this.resolveRoomTypeFromLists();
-        }
+        this.messages = response.data;
         this.$nextTick(this.scrollToBottom);
       } catch (error) {
         console.error("Communication error:", error);
@@ -459,73 +420,6 @@ export default {
       }
     },
 
-    async resolveRoomTypeFromLists() {
-      if (!this.roomId) return;
-      try {
-        const [groupRes, directRes] = await Promise.all([
-          api.get('/api/rooms/group/'),
-          api.get('/api/rooms/'),
-        ]);
-        const all = [...groupRes.data, ...directRes.data];
-        const found = all.find((r) => String(r.id) === String(this.roomId));
-        if (found) this.roomType = found.type;
-      } catch (e) {
-        console.error('resolveRoomTypeFromLists:', e);
-      }
-    },
-
-    teardownGroupReadObserver() {
-      if (this.groupReadObserver) {
-        this.groupReadObserver.disconnect();
-        this.groupReadObserver = null;
-      }
-    },
-
-    setupGroupReadObserver() {
-      this.teardownGroupReadObserver();
-      if (this.roomType !== 'group' || !this.$refs.messageWindow) return;
-      const root = this.$refs.messageWindow;
-      this.groupReadObserver = new IntersectionObserver(
-        (entries) => {
-          entries.forEach((entry) => {
-            if (!entry.isIntersecting) return;
-            const id = entry.target.getAttribute('data-message-id');
-            if (!id) return;
-            const msg = this.messages.find((m) => String(m.id) === String(id));
-            this.tryGroupMessageSeen(msg, id);
-          });
-        },
-        { root, rootMargin: '0px 0px 80px 0px', threshold: [0, 0.15, 0.35] }
-      );
-      root.querySelectorAll('[data-message-id]').forEach((el) => {
-        this.groupReadObserver.observe(el);
-      });
-    },
-
-    /** Record a read receipt for someone else's message in a group (viewport or hover). */
-    tryGroupMessageSeen(msg, domId = null) {
-      if (this.roomType !== 'group' || !msg || msg.username === this.currentUser) return;
-      const id = domId != null ? String(domId) : String(msg.id);
-      if (!id || id === 'undefined') return;
-      if (this.seenTrackedMessageIds[id]) return;
-      if (!this.sendMarkMessageSeen(msg.id)) return;
-      this.seenTrackedMessageIds[id] = true;
-    },
-
-    sendMarkMessageSeen(messageId) {
-      if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return false;
-      const mid = Number(messageId);
-      if (Number.isNaN(mid)) return false;
-      this.socket.send(
-        JSON.stringify({
-          action: 'mark_message_seen',
-          message_id: mid,
-          username: this.currentUser,
-        })
-      );
-      return true;
-    },
-
     markRoomAsRead() {
       if (this.socket && this.socket.readyState === WebSocket.OPEN && this.roomId) {
         this.socket.send(JSON.stringify({
@@ -568,7 +462,6 @@ export default {
   },
 
   beforeUnmount() {
-    this.teardownGroupReadObserver();
     if (this.socket) this.socket.close();
   }
 };

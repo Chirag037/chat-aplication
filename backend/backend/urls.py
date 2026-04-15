@@ -18,6 +18,7 @@ urlpatterns = [
     path('api/rooms/group/', list_group_rooms),
     path('api/rooms/join/', join_group_room),
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    
 ]
 
 if settings.DEBUG:

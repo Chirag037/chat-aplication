@@ -29,7 +29,17 @@ class NotificationConsumer(AsyncWebsocketConsumer):
                 self.channel_name
             )
             # Mark all pending messages for this user as delivered across ALL rooms
-            await self.mark_all_as_delivered(username)
+            room_ids = await self.mark_all_as_delivered(username)
+            for rid in room_ids:
+                await self.channel_layer.group_send(
+                    f'chat_{rid}',
+                    {
+                        'type': 'status_update',
+                        'status': 'delivered',
+                        'username': username,
+                        'room_id': rid
+                    }
+                )
             return
 
         # For any non-join messages, require that the socket has identified itself.
@@ -62,9 +72,14 @@ class NotificationConsumer(AsyncWebsocketConsumer):
 
     @database_sync_to_async
     def mark_all_as_delivered(self, username):
-        # Find all sent messages addressed to rooms this user is in
+        # Find all sent messages addressed to rooms this user is in (sent by others)
         user_rooms = Room.objects.filter(participants__username=username)
-        Message.objects.filter(room__in=user_rooms, status='sent').exclude(user__username=username).update(status='delivered')
+        msgs_to_update = Message.objects.filter(room__in=user_rooms, status='sent').exclude(user__username=username)
+        # Get distinct room IDs that will be affected
+        affected_room_ids = list(msgs_to_update.values_list('room_id', flat=True).distinct())
+        # Bulk update
+        msgs_to_update.update(status='delivered')
+        return affected_room_ids
 
 class ChatConsumer(AsyncWebsocketConsumer):
     async def confirm_user(self):
@@ -178,18 +193,31 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 )
         
         elif action == 'mark_read':
-            # Direct rooms only: bulk "viewed" on Message.status (group uses per-message receipts)
-            did_mark = await self.mark_messages_viewed_if_direct(username, self.room_id)
-            if did_mark:
-                await self.channel_layer.group_send(
-                    self.room_group_name,
-                    {
-                        'type': 'status_update',
-                        'room_id': self.room_id,
-                        'status': 'viewed',
-                        'username': username
-                    }
-                )
+            room_type = await self.get_room_type(self.room_id)
+            if room_type == 'direct':
+                did_mark = await self.mark_messages_viewed_if_direct(username, self.room_id)
+                if did_mark:
+                    await self.channel_layer.group_send(
+                        self.room_group_name,
+                        {
+                            'type': 'status_update',
+                            'room_id': self.room_id,
+                            'status': 'viewed',
+                            'username': username
+                        }
+                    )
+            elif room_type == 'group':
+                # Bulk-create MessageRead entries for all unseen messages
+                results = await self.mark_all_group_messages_seen(username, self.room_id)
+                for result in results:
+                    await self.channel_layer.group_send(
+                        self.room_group_name,
+                        {
+                            'type': 'read_receipt',
+                            'message_id': result['message_id'],
+                            'seen_by': result['seen_by'],
+                        }
+                    )
 
         elif action == 'mark_message_seen':
             msg_id = data.get('message_id')
@@ -301,12 +329,40 @@ class ChatConsumer(AsyncWebsocketConsumer):
         Message.objects.filter(room_id=room_id, status='sent').exclude(user__username=username).update(status='delivered')
 
     @database_sync_to_async
+    def get_room_type(self, room_id):
+        try:
+            return Room.objects.get(id=room_id).type
+        except Room.DoesNotExist:
+            return None
+
+    @database_sync_to_async
     def mark_messages_viewed_if_direct(self, username, room_id):
         room = Room.objects.get(id=room_id)
         if room.type != 'direct':
             return False
         Message.objects.filter(room_id=room_id).exclude(user__username=username).update(status='viewed')
         return True
+
+    @database_sync_to_async
+    def mark_all_group_messages_seen(self, username, room_id):
+        """Bulk-create MessageRead entries for all unseen messages in a group room."""
+        try:
+            room = Room.objects.get(id=room_id, type='group')
+            user = User.objects.get(username=username)
+        except (Room.DoesNotExist, User.DoesNotExist):
+            return []
+        if not room.participants.filter(id=user.id).exists():
+            return []
+        # Find all messages by OTHER users that this user hasn't read yet
+        unseen_msgs = Message.objects.filter(room=room).exclude(user=user).exclude(reads__user=user)
+        results = []
+        for msg in unseen_msgs:
+            MessageRead.objects.get_or_create(message=msg, user=user)
+            seen = list(
+                MessageRead.objects.filter(message=msg).values_list('user__username', flat=True).order_by('read_at')
+            )
+            results.append({'message_id': msg.id, 'seen_by': seen})
+        return results
 
     @database_sync_to_async
     def record_message_seen(self, username, room_id, message_id):
