@@ -47,7 +47,7 @@
             'group flex items-center px-4 py-2 rounded-lg cursor-pointer transition-all duration-200 mb-0.5',
             activeRoomId == room.id ? 'bg-slate-800 text-white font-bold' : 'text-slate-500 hover:bg-slate-800/50 hover:text-slate-200'
           ]"
-          @click="selectRoom(room.id)"
+          @click="selectRoom(room)"
         >
           <div :class="['w-4 h-4 rounded-md flex items-center justify-center text-[8px] mr-3 font-black transition-colors', activeRoomId == room.id ? 'bg-white text-slate-900' : 'bg-slate-800 text-slate-500 group-hover:bg-slate-700']">
             {{ getInitial(getRoomName(room)) }}
@@ -103,6 +103,7 @@ export default {
       directRooms: [],
       users: [],
       currentUser: localStorage.getItem('username'),
+      consecutiveFetchFailures: 0,
     };
   },
   methods: {
@@ -116,8 +117,22 @@ export default {
         this.groupRooms = groupRes.data;
         this.directRooms = directRes.data;
         this.users = usersRes.data;
+        this.consecutiveFetchFailures = 0;
       } catch (error) {
         console.error('Context error:', error);
+        this.consecutiveFetchFailures += 1;
+
+        // If backend/proxy is down (502/503/504) stop hammering; retry later.
+        const status = error?.response?.status;
+        if (status && status >= 500 && this.consecutiveFetchFailures >= 3) {
+          clearInterval(this.interval);
+          this.interval = null;
+          setTimeout(() => {
+            this.consecutiveFetchFailures = 0;
+            this.fetchData();
+            this.interval = setInterval(this.fetchData, 5000);
+          }, 10000);
+        }
       }
     },
     getRoomName(room) {
@@ -130,8 +145,8 @@ export default {
     getInitial(name) {
       return name ? name.charAt(0).toUpperCase() : '?';
     },
-    selectRoom(roomId) {
-      this.$emit('select-room', roomId);
+    selectRoom(room) {
+      this.$emit('select-room', room);
     },
     async selectGroupRoom(room) {
       const isMember = room.participants && room.participants.some(p => p.username === this.currentUser);
@@ -143,13 +158,13 @@ export default {
           console.error('Auth error:', error);
         }
       }
-      this.$emit('select-room', room.id);
+      this.$emit('select-room', room);
     },
     async startDirectChat(userId) {
       try {
         const response = await api.post('/api/rooms/direct/', { user_id: userId });
         const room = response.data;
-        this.$emit('select-room', room.id);
+        this.$emit('select-room', room);
         this.fetchData();
       } catch (error) {
         console.error('Session error:', error);

@@ -1,11 +1,12 @@
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
+from django.db.models import Count, Prefetch
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from .models import Message, Room
+from .models import Message, Room, MessageRead
 from .serializers import RegisterSerializer, LoginSerializer, UserSerializer, RoomSerializer, MessageSerializer
 
 @api_view(['GET'])
@@ -65,8 +66,10 @@ def list_users(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def room_list(request):
-    # Returns only direct message rooms for the current user
-    rooms = Room.objects.filter(participants=request.user, type='direct')
+    # Returns only direct message rooms for the current user that have both participants
+    rooms = Room.objects.filter(participants=request.user, type='direct') \
+        .annotate(p_count=Count('participants')) \
+        .filter(p_count=2)
     serializer = RoomSerializer(rooms, many=True)
     return Response(serializer.data)
     
@@ -130,7 +133,10 @@ def messages(request):
         except Room.DoesNotExist:
             return Response({"error": "Room not found or access denied"}, status=status.HTTP_403_FORBIDDEN)
 
-        msgs = Message.objects.filter(room=room).select_related('user')
+        reads_qs = MessageRead.objects.select_related('user').order_by('read_at')
+        msgs = Message.objects.filter(room=room).select_related('user', 'room').prefetch_related(
+            Prefetch('reads', queryset=reads_qs)
+        )
         serializer = MessageSerializer(msgs, many=True)
         return Response(serializer.data)
 

@@ -21,7 +21,9 @@
             <h2 class="text-sm font-bold text-slate-900 tracking-tight">{{ currentRoomName }}</h2>
             <div v-if="roomId" class="flex items-center gap-1.5 py-0.5">
               <span class="w-1 h-1 bg-slate-200 rounded-full"></span>
-              <span class="text-[9px] font-bold text-slate-400 uppercase tracking-[0.15em]">Direct Message</span>
+              <span class="text-[9px] font-bold text-slate-400 uppercase tracking-[0.15em]">
+                {{ roomType === 'group' ? 'Channel' : 'Direct Message' }}
+              </span>
             </div>
           </div>
         </div>
@@ -45,6 +47,8 @@
           v-for="(msg, index) in messages" 
           :key="msg.id || index" 
           :class="['flex flex-col w-full', msg.username === currentUser ? 'items-end' : 'items-start']"
+          :data-message-id="roomType === 'group' && msg.username !== currentUser ? msg.id : null"
+          @mouseenter="tryGroupMessageSeen(msg)"
         >
           <!-- Metadata -->
           <div class="flex items-center gap-2 mb-1 px-1 opacity-60">
@@ -80,10 +84,25 @@
               <!-- Normal View -->
               <div v-if="editingMessageId !== msg.id">
                 <p class="whitespace-pre-wrap">{{ msg.content }}</p>
-                <div :class="['mt-1.5 flex items-center gap-1 text-[9px] font-medium', msg.username === currentUser ? 'text-green-600' : 'text-blue-600']">
-                  {{ formatTime(msg.created_at) }}
-                  <span v-if="msg.username === currentUser">· Delivered</span>
-                  <span v-if="msg.is_edited" class="italic">· Edited</span>
+                <template v-if="roomType === 'group'">
+                  <div
+                    v-if="msg.seen_by && msg.seen_by.length"
+                    class="mt-2 text-[9px] font-medium text-slate-600"
+                  >
+                    Seen by {{ msg.seen_by.join(', ') }}
+                  </div>
+                  <div
+                    v-else-if="msg.username === currentUser"
+                    class="mt-2 text-[9px] text-slate-400 italic"
+                  >
+                    No reads yet
+                  </div>
+                </template>
+                <div class="mt-1.5 flex items-center justify-end gap-1.5 px-0.5">
+                  <span class="text-[9px] font-medium opacity-60 uppercase tracking-tighter">
+                    {{ formatTime(msg.created_at) }}
+                  </span>
+                  <span v-if="msg.is_edited" class="text-[8px] italic opacity-40">Edited</span>
                 </div>
               </div>
 
@@ -100,6 +119,23 @@
                   <button @click="cancelEdit" class="text-[10px] font-bold text-slate-500 uppercase tracking-widest hover:text-slate-700">Cancel</button>
                   <button @click="saveEdit" class="text-[10px] font-bold text-green-600 uppercase tracking-widest hover:text-green-800">Save</button>
                 </div>
+              </div>
+            </div>
+
+            <!-- Status Icons (Moved Outside) -->
+            <div v-if="msg.username === currentUser" class="absolute -bottom-5 right-1 flex items-center h-4">
+              <!-- Viewed (Blue Circle) -->
+              <div v-if="msg.status === 'viewed'" class="w-2 h-2 bg-blue-500 rounded-full shadow-[0_0_6px_rgba(59,130,246,0.6)] border border-blue-400"></div>
+              
+              <!-- Delivered (Double Tick) -->
+              <div v-else-if="msg.status === 'delivered'" class="flex -space-x-1.5 opacity-60">
+                <svg class="w-3 h-3 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
+                <svg class="w-3 h-3 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
+              </div>
+              
+              <!-- Sent (Single Tick) -->
+              <div v-else class="opacity-30">
+                <svg class="w-3 h-3 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
               </div>
             </div>
           </div>
@@ -165,38 +201,68 @@ export default {
       currentRoomName: "Select Workspace",
       isSidebarOpen: false,
       socket: null,
+      notifySocket: null,
       editingMessageId: null,
-      editingContent: ""
+      editingContent: "",
+      roomType: null,
+      groupReadObserver: null,
+      seenTrackedMessageIds: {},
     };
+  },
+  watch: {
+    messages() {
+      if (this.roomType !== 'group') return;
+      this.$nextTick(() => this.setupGroupReadObserver());
+    },
+    roomType(val) {
+      if (val !== 'group') this.teardownGroupReadObserver();
+      else this.$nextTick(() => this.setupGroupReadObserver());
+    },
   },
   methods: {
     getInitial(name) {
       return name ? name.charAt(0).toUpperCase() : '?';
     },
-    async handleRoomSelect(id) {
+    async handleRoomSelect(payload) {
+      const room = typeof payload === 'object' ? payload : null;
+      const id = room ? room.id : payload;
+
+      this.seenTrackedMessageIds = {};
+      this.roomType = room ? room.type : null;
       this.roomId = id;
       localStorage.setItem('last_room_id', id);
       this.isSidebarOpen = false;
-      this.fetchMessages();
+      await this.fetchMessages();
       this.initWebSocket();
-
-      try {
-        const [groupRes, directRes] = await Promise.all([
-          api.get('/api/rooms/group/'),
-          api.get('/api/rooms/')
-        ]);
-        const allRooms = [...groupRes.data, ...directRes.data];
-        const room = allRooms.find(r => r.id == id);
-        if (room) {
-          if (room.type === 'direct') {
-            const other = room.participants.find(p => p.username !== this.currentUser);
-            this.currentRoomName = other ? other.username : 'Private Session';
-          } else {
-            this.currentRoomName = room.name || `Session ${room.id}`;
-          }
+      
+      if (room) {
+        if (room.type === 'direct') {
+          const other = room.participants.find(p => p.username !== this.currentUser);
+          this.currentRoomName = other ? other.username : 'Private Session';
+        } else {
+          this.currentRoomName = room.name || `Session ${room.id}`;
         }
-      } catch (e) {
-        console.error('Context error:', e);
+      } else {
+        // Fallback if just an ID is somehow passed
+        try {
+          const [groupRes, directRes] = await Promise.all([
+            api.get('/api/rooms/group/'),
+            api.get('/api/rooms/')
+          ]);
+          const allRooms = [...groupRes.data, ...directRes.data];
+          const foundRoom = allRooms.find(r => r.id == id);
+          if (foundRoom) {
+            this.roomType = foundRoom.type;
+            if (foundRoom.type === 'direct') {
+              const other = foundRoom.participants.find(p => p.username !== this.currentUser);
+              this.currentRoomName = other ? other.username : 'Private Session';
+            } else {
+              this.currentRoomName = foundRoom.name || `Session ${foundRoom.id}`;
+            }
+          }
+        } catch (e) {
+          console.error('Context error:', e);
+        }
       }
     },
     initWebSocket() {
@@ -209,16 +275,33 @@ export default {
       
       this.socket = new WebSocket(socketUrl);
 
+      this.socket.onopen = () => {
+         this.socket.send(JSON.stringify({
+            'action': 'join',
+            'username': this.currentUser
+         }));
+         this.markRoomAsRead();
+         // Observer may have fired before the socket was open; allow retries after connect.
+         if (this.roomType === 'group') {
+           this.seenTrackedMessageIds = {};
+           this.$nextTick(() => this.setupGroupReadObserver());
+         }
+      };
+
       this.socket.onmessage = (e) => {
         const data = JSON.parse(e.data);
         if (data && data.room == this.roomId) {
-          if (data.type === 'message' && data.username !== this.currentUser) {
+          if (data.type === 'message' ) {
              this.messages.push({
                username: data.username,
                content: data.content,
                created_at: data.created_at,
-               id: data.id || Date.now()
+               id: data.id || Date.now(),
+               status: data.status || 'sent',
+               seen_by: [],
+               room_type: data.room_type,
              });
+             if (data.room_type) this.roomType = data.room_type;
              this.$nextTick(this.scrollToBottom);
           } else if (data.type === 'delete') {
              this.messages = this.messages.filter(m => m.id !== data.message_id);
@@ -228,7 +311,33 @@ export default {
                msg.content = data.content;
                msg.is_edited = true;
              }
+          } else if (data.type === 'status_update') {
+             // If the OTHER person updated their view/delivery status, update my sent messages
+             if (data.username !== this.currentUser) {
+               this.messages.forEach(m => {
+                 if (m.username === this.currentUser) {
+                    // If they 'viewed' it, flip to viewed
+                    if (data.status === 'viewed') {
+                      m.status = 'viewed';
+                    } 
+                    // If they 'delivered' it, only update if it was 'sent'
+                    else if (data.status === 'delivered' && m.status === 'sent') {
+                      m.status = 'delivered';
+                    }
+                 }
+               });
+             }
+          } else if (data.type === 'read_receipt') {
+            const target = this.messages.find((m) => m.id == data.message_id);
+            if (target) {
+              target.seen_by = [...(data.seen_by || [])];
+            }
           }
+        }
+        
+        // If we get a new message while in this room, mark it as read
+        if (data.type === 'message' && data.username !== this.currentUser) {
+          this.markRoomAsRead();
         }
       };
 
@@ -236,11 +345,40 @@ export default {
         console.log('Socket closed');
       };
     },
+
+    initNotificationSocket() {
+      if (this.notifySocket) return;
+
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const socketUrl = `${protocol}//${window.location.host}/ws/notifications/`;
+      
+      this.notifySocket = new WebSocket(socketUrl);
+
+      this.notifySocket.onopen = () => {
+         this.notifySocket.send(JSON.stringify({
+            'action': 'join',
+            'username': this.currentUser
+         }));
+      };
+
+      this.notifySocket.onclose = () => {
+        this.notifySocket = null;
+        setTimeout(() => this.initNotificationSocket(), 3000);
+      };
+    },
     async fetchMessages() {
       if (!this.roomId) return;
       try {
         const response = await api.get(`/api/messages/?room_id=${this.roomId}`);
-        this.messages = response.data;
+        this.messages = response.data.map((m) => ({
+          ...m,
+          seen_by: Array.isArray(m.seen_by) ? m.seen_by : [],
+        }));
+        if (this.messages.length) {
+          this.roomType = this.messages[0].room_type;
+        } else {
+          await this.resolveRoomTypeFromLists();
+        }
         this.$nextTick(this.scrollToBottom);
       } catch (error) {
         console.error("Communication error:", error);
@@ -321,6 +459,82 @@ export default {
       }
     },
 
+    async resolveRoomTypeFromLists() {
+      if (!this.roomId) return;
+      try {
+        const [groupRes, directRes] = await Promise.all([
+          api.get('/api/rooms/group/'),
+          api.get('/api/rooms/'),
+        ]);
+        const all = [...groupRes.data, ...directRes.data];
+        const found = all.find((r) => String(r.id) === String(this.roomId));
+        if (found) this.roomType = found.type;
+      } catch (e) {
+        console.error('resolveRoomTypeFromLists:', e);
+      }
+    },
+
+    teardownGroupReadObserver() {
+      if (this.groupReadObserver) {
+        this.groupReadObserver.disconnect();
+        this.groupReadObserver = null;
+      }
+    },
+
+    setupGroupReadObserver() {
+      this.teardownGroupReadObserver();
+      if (this.roomType !== 'group' || !this.$refs.messageWindow) return;
+      const root = this.$refs.messageWindow;
+      this.groupReadObserver = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (!entry.isIntersecting) return;
+            const id = entry.target.getAttribute('data-message-id');
+            if (!id) return;
+            const msg = this.messages.find((m) => String(m.id) === String(id));
+            this.tryGroupMessageSeen(msg, id);
+          });
+        },
+        { root, rootMargin: '0px 0px 80px 0px', threshold: [0, 0.15, 0.35] }
+      );
+      root.querySelectorAll('[data-message-id]').forEach((el) => {
+        this.groupReadObserver.observe(el);
+      });
+    },
+
+    /** Record a read receipt for someone else's message in a group (viewport or hover). */
+    tryGroupMessageSeen(msg, domId = null) {
+      if (this.roomType !== 'group' || !msg || msg.username === this.currentUser) return;
+      const id = domId != null ? String(domId) : String(msg.id);
+      if (!id || id === 'undefined') return;
+      if (this.seenTrackedMessageIds[id]) return;
+      if (!this.sendMarkMessageSeen(msg.id)) return;
+      this.seenTrackedMessageIds[id] = true;
+    },
+
+    sendMarkMessageSeen(messageId) {
+      if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return false;
+      const mid = Number(messageId);
+      if (Number.isNaN(mid)) return false;
+      this.socket.send(
+        JSON.stringify({
+          action: 'mark_message_seen',
+          message_id: mid,
+          username: this.currentUser,
+        })
+      );
+      return true;
+    },
+
+    markRoomAsRead() {
+      if (this.socket && this.socket.readyState === WebSocket.OPEN && this.roomId) {
+        this.socket.send(JSON.stringify({
+          'action': 'mark_read',
+          'username': this.currentUser
+        }));
+      }
+    },
+
     scrollToBottom() {
       const el = this.$refs.messageWindow;
       if (el) el.scrollTop = el.scrollHeight;
@@ -345,6 +559,8 @@ export default {
       return;
     }
 
+    this.initNotificationSocket();
+
     if (this.roomId) {
       await this.fetchMessages();
       this.initWebSocket();
@@ -352,6 +568,7 @@ export default {
   },
 
   beforeUnmount() {
+    this.teardownGroupReadObserver();
     if (this.socket) this.socket.close();
   }
 };

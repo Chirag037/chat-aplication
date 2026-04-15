@@ -21,4 +21,25 @@ api.interceptors.request.use((config) => {
     return Promise.reject(error);
 });
 
+api.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        // If token is missing/expired, avoid endless polling errors: logout and redirect.
+        const status = error?.response?.status;
+        if (status === 401) {
+            try {
+                localStorage.removeItem('access_token');
+                localStorage.removeItem('username');
+                localStorage.removeItem('last_room_id');
+            } catch (_) {
+                // ignore storage errors
+            }
+            if (window.location.pathname !== '/login') {
+                window.location.href = '/login';
+            }
+        }
+        return Promise.reject(error);
+    }
+);
+
 export default api;

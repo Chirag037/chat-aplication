@@ -34,7 +34,16 @@ class RoomSerializer(serializers.ModelSerializer):
 
 class MessageSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username', read_only=True)
-    
+    seen_by = serializers.SerializerMethodField()
+    room_type = serializers.CharField(source='room.type', read_only=True)
+
     class Meta:
         model = Message
-        fields = ['id', 'username', 'content', 'room', 'created_at']
+        fields = ['id', 'user', 'username', 'content', 'room', 'status', 'created_at', 'seen_by', 'room_type']
+
+    def get_seen_by(self, obj):
+        if not obj.room or obj.room.type != 'group':
+            return []
+        return list(
+            obj.reads.values_list('user__username', flat=True).order_by('read_at')
+        )
