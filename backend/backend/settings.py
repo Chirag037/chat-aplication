@@ -14,6 +14,7 @@ else:
     ALLOWED_HOSTS = [
         "localhost",
         "127.0.0.1",
+        "*"
     ]
 
 CSRF_TRUSTED_ORIGINS = [
@@ -34,6 +35,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'chat',
     'channels',
+    'storages',
 ]
 
 MIDDLEWARE = [
@@ -141,3 +143,24 @@ TEMPLATES = [
         },
     },
 ]
+
+# Media files storage (MinIO/S3)
+AWS_ACCESS_KEY_ID = os.getenv('MINIO_ACCESS_KEY', 'minioadmin')
+AWS_SECRET_ACCESS_KEY = os.getenv('MINIO_SECRET_KEY', 'minioadmin')
+AWS_STORAGE_BUCKET_NAME = os.getenv('MINIO_BUCKET_NAME', 'media')
+AWS_S3_ENDPOINT_URL = os.getenv('MINIO_ENDPOINT', 'http://localhost:9000')
+AWS_S3_REGION_NAME = 'us-east-1'  # Required by boto3 (default for MinIO)
+AWS_S3_FILE_OVERWRITE = False
+AWS_QUERYSTRING_AUTH = False  # Set to True for expiring links
+AWS_S3_PATH_STYLE_ACCESS = True
+
+STORAGES = {
+    "default": {
+        "BACKEND": "storages.backends.s3.S3Storage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
+    },
+}
+
+MEDIA_URL = f'{AWS_S3_ENDPOINT_URL}/{AWS_STORAGE_BUCKET_NAME}/'

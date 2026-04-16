@@ -6,6 +6,8 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.permissions import IsAuthenticated, AllowAny
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 from .models import Message, Room, MessageRead
 from .serializers import RegisterSerializer, LoginSerializer, UserSerializer, RoomSerializer, MessageSerializer
 
@@ -143,16 +145,44 @@ def messages(request):
     elif request.method == 'POST':
         content = request.data.get('content')
         room_id = request.data.get('room')
+        message_type = request.data.get('message_type', 'text')
+        attachment = request.FILES.get('attachment')
         
-        if not content or not room_id or room_id == 'null':
-            return Response({"error": "content and room are required"}, status=status.HTTP_400_BAD_REQUEST)
+        if not room_id or room_id == 'null':
+            return Response({"error": "room is required"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not content and not attachment:
+            return Response({"error": "content or attachment is required"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             room = Room.objects.get(id=room_id, participants=request.user)
         except Room.DoesNotExist:
             return Response({"error": "Room not found or access denied"}, status=status.HTTP_403_FORBIDDEN)
 
-        msg = Message.objects.create(user=request.user, content=content, room=room)
+        msg = Message.objects.create(
+            user=request.user, 
+            content=content, 
+            room=room, 
+            message_type=message_type, 
+            attachment=attachment
+        )
         serializer = MessageSerializer(msg)
+        
+        # Broadcast message via WebSocket
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            f'chat_{room_id}',
+            {
+                'type': 'chat_message',
+                'message': msg.content,
+                'username': request.user.username,
+                'created_at': msg.created_at.isoformat(),
+                'id': msg.id,
+                'room_type': room.type,
+                'message_type': msg.message_type,
+                'attachment': serializer.data['attachment'],
+            }
+        )
+
         return Response(serializer.data, status=status.HTTP_201_CREATED)
         

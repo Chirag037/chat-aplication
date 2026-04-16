@@ -79,7 +79,49 @@
             >
               <!-- Normal View -->
               <div v-if="editingMessageId !== msg.id">
-                <p class="whitespace-pre-wrap">{{ msg.content }}</p>
+                <!-- Text Content (if any) -->
+                <p v-if="msg.content" class="whitespace-pre-wrap">{{ msg.content }}</p>
+
+                <!-- Media Content -->
+                <div v-if="msg.attachment" class="mt-2 rounded-xl overflow-hidden shadow-sm bg-black/5 border border-black/5 group/media relative">
+                  
+                  <!-- Image Display -->
+                  <div v-if="msg.message_type === 'image'" class="relative max-h-[320px] max-w-[320px] flex items-center justify-center bg-black/5 overflow-hidden">
+                    <img :src="msg.attachment" class="w-full h-full object-cover hover:brightness-105 transition-all cursor-zoom-in" @click="openMedia(msg.attachment)" />
+                    <!-- Hover Download Overlay -->
+                    <div class="absolute inset-0 bg-black/20 opacity-0 group-hover/media:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                      <button @click.stop="downloadFile(msg.attachment)" class="pointer-events-auto p-2 bg-white/90 rounded-full shadow-lg hover:bg-white transition-colors" title="Download Image">
+                        <svg class="w-5 h-5 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Video Display -->
+                  <div v-else-if="msg.message_type === 'video'" class="relative">
+                    <video :src="msg.attachment" controls class="max-w-full block"></video>
+                    <!-- Hover Download Button (Positioned top-right) -->
+                    <button @click.stop="downloadFile(msg.attachment)" class="absolute top-2 right-2 p-1.5 bg-white/80 rounded-lg shadow-sm opacity-0 group-hover/media:opacity-100 transition-opacity hover:bg-white" title="Download Video">
+                      <svg class="w-4 h-4 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                    </button>
+                  </div>
+
+                  <!-- File / Document Card -->
+                  <div v-else class="flex items-center gap-4 p-4 bg-white/40 hover:bg-white/60 transition-colors cursor-pointer" @click="downloadFile(msg.attachment)">
+                    <div class="shrink-0 w-10 h-10 flex items-center justify-center bg-white/80 rounded-xl shadow-sm border border-black/5">
+                      <svg class="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                    </div>
+                    <div class="flex-1 min-w-0 pr-2">
+                      <p class="text-[11px] font-bold text-slate-700 truncate mb-0.5">{{ getFileName(msg.attachment) }}</p>
+                      <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{{ getFileExt(msg.attachment) }} File</p>
+                    </div>
+                    <div class="shrink-0">
+                       <button class="p-2 text-slate-400 hover:text-indigo-600 transition-colors">
+                          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                       </button>
+                    </div>
+                  </div>
+                </div>
+
                 <div class="mt-1.5 flex items-center justify-end gap-1.5 px-0.5">
                   <span class="text-[9px] font-medium opacity-60 uppercase tracking-tighter">
                     {{ formatTime(msg.created_at) }}
@@ -146,17 +188,40 @@
       <footer class="p-6 md:p-8 bg-white shrink-0 shadow-[0_-1px_0_0_rgba(241,245,249,1)]">
         <div class="w-full flex items-center gap-4">
           <div class="flex-1 flex items-center bg-slate-50 border border-slate-100 rounded-xl focus-within:bg-white focus-within:border-slate-900 focus-within:shadow-lg focus-within:shadow-slate-200/20 transition-all duration-200 overflow-hidden">
+            <!-- Hidden File Input -->
+            <input type="file" ref="fileInput" class="hidden" @change="handleFileChange" />
+            
+            <button 
+              @click="triggerFileInput" 
+              class="pl-5 pr-2 text-slate-400 hover:text-slate-900 transition-colors"
+              title="Attach media"
+              :disabled="sending"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+            </button>
+
             <input 
               v-model="newMessage" 
               @keyup.enter="sendMessage" 
-              placeholder="Start typing..." 
+              ref="textInput"
+              :placeholder="selectedFile ? `File ready: ${selectedFile.name}` : 'Start typing...'" 
               type="text"
               :disabled="sending"
-              class="flex-1 bg-transparent px-5 py-3.5 text-sm placeholder-slate-300 outline-none disabled:opacity-50"
+              class="flex-1 bg-transparent px-3 py-3.5 text-sm placeholder-slate-300 outline-none disabled:opacity-50"
             />
+            
+            <button 
+              v-if="selectedFile"
+              @click="clearFile"
+              class="px-2 text-red-400 hover:text-red-600 transition-colors"
+              title="Clear file"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+
             <button 
               @click="sendMessage" 
-              :disabled="!newMessage.trim() || sending"
+              :disabled="(!newMessage.trim() && !selectedFile) || sending"
               class="px-5 group disabled:opacity-30"
             >
               <svg v-if="!sending" class="w-5 h-5 text-slate-400 group-hover:text-slate-900 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"/></svg>
@@ -169,6 +234,25 @@
         </div>
       </footer>
     </div>
+
+    <!-- Lightbox Overlay -->
+    <Transition name="fade">
+      <div v-if="lightboxImage" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-sm p-4 sm:p-10" @click="closeLightbox">
+        <button @click="closeLightbox" class="absolute top-6 right-6 text-white/50 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10 z-[110]">
+          <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+        
+        <div class="relative max-w-full max-h-full flex items-center justify-center" @click.stop>
+          <img :src="lightboxImage" class="max-w-full max-h-full object-contain rounded-lg shadow-2xl transition-all duration-300 transform scale-100" />
+          
+          <!-- Download Button in Lightbox -->
+          <button @click="downloadFile(lightboxImage)" class="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 px-6 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl border border-white/20 backdrop-blur-md transition-all">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+            <span class="text-xs font-bold uppercase tracking-widest">Download Full Resolution</span>
+          </button>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -190,7 +274,9 @@ export default {
       socket: null,
       notifySocket: null,
       editingMessageId: null,
-      editingContent: ""
+      editingContent: "",
+      selectedFile: null,
+      lightboxImage: null
     };
   },
   methods: {
@@ -265,6 +351,8 @@ export default {
                id: data.id || Date.now(),
                status: data.status || 'sent',
                room_type: data.room_type,
+               message_type: data.message_type || 'text',
+               attachment: data.attachment || null,
                seen_by: [],
              });
              this.$nextTick(this.scrollToBottom);
@@ -350,30 +438,113 @@ export default {
     },
 
     async sendMessage() {
-      if (!this.newMessage.trim() || this.sending || !this.roomId) return;
+      if ((!this.newMessage.trim() && !this.selectedFile) || this.sending || !this.roomId) return;
 
       this.sending = true;
       try {
-        if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+        // If there's a file, we MUST use the REST API because WebSockets don't handle Multipart well
+        if (this.selectedFile) {
+          const formData = new FormData();
+          formData.append('room', this.roomId);
+          formData.append('content', this.newMessage);
+          formData.append('attachment', this.selectedFile);
+          
+          let type = 'file';
+          if (this.selectedFile.type.startsWith('image/')) type = 'image';
+          else if (this.selectedFile.type.startsWith('video/')) type = 'video';
+          formData.append('message_type', type);
+
+          const response = await api.post('/api/messages/', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+          });
+          
+          // The backend will broadcast this via WebSocket, but we can also update local state if needed
+          // Actually, our WebSocket listener will pick it up, so we just clear inputs.
+          this.selectedFile = null;
+          this.newMessage = "";
+        } 
+        // If it's just text, we can use either WebSocket (fast) or REST
+        else if (this.socket && this.socket.readyState === WebSocket.OPEN) {
           this.socket.send(JSON.stringify({
             'action': 'send',
             'message': this.newMessage,
             'username': this.currentUser
           }));
-          
           this.newMessage = "";
-          this.$nextTick(this.scrollToBottom);
         } else {
           const payload = { room: this.roomId, content: this.newMessage };
           await api.post('/api/messages/', payload);
           this.newMessage = ""; 
-          await this.fetchMessages();
         }
+        
+        this.$nextTick(this.scrollToBottom);
       } catch (error) {
         console.error("Link error:", error);
       } finally {
         this.sending = false;
       }
+    },
+
+    triggerFileInput() {
+      this.$refs.fileInput.click();
+    },
+
+    handleFileChange(e) {
+      const file = e.target.files[0];
+      if (file) {
+        this.selectedFile = file;
+        // Focus the input so the user can just press Enter to send
+        this.$nextTick(() => {
+          if (this.$refs.textInput) this.$refs.textInput.focus();
+        });
+      }
+    },
+
+    clearFile() {
+      this.selectedFile = null;
+      if (this.$refs.fileInput) this.$refs.fileInput.value = '';
+    },
+
+    openMedia(url) {
+      this.lightboxImage = url;
+      // Add escape listener for lightbox
+      window.addEventListener('keydown', this.handleEsc);
+    },
+
+    closeLightbox() {
+      this.lightboxImage = null;
+      window.removeEventListener('keydown', this.handleEsc);
+    },
+
+    handleEsc(e) {
+      if (e.key === 'Escape') this.closeLightbox();
+    },
+
+    downloadFile(url) {
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', '');
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    },
+
+    getFileName(url) {
+      if (!url) return 'File';
+      try {
+        const parts = url.split('/');
+        const namePart = parts[parts.length - 1];
+        // Remove the random suffix Django adds if needed, but usually the last part is fine
+        return decodeURIComponent(namePart);
+      } catch (e) {
+        return 'Download File';
+      }
+    },
+
+    getFileExt(url) {
+      if (!url) return '';
+      const parts = url.split('.');
+      return parts.length > 1 ? parts.pop().toUpperCase() : 'UNKNOWN';
     },
 
     deleteMessage(id) {
@@ -468,5 +639,13 @@ export default {
 </script>
 
 <style scoped>
-/* Redundant scoped styles removed - All migrated to Tailwind utility classes */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
 </style>

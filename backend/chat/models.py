@@ -22,17 +22,26 @@ class Message(models.Model):
         ('delivered', 'Delivered'),
         ('viewed', 'Viewed'),
     )
+    MESSAGE_TYPES = (
+        ('text', 'Text'),
+        ('image', 'Image'),
+        ('video', 'Video'),
+        ('file', 'File'),
+    )
     user = models.ForeignKey(User, on_delete=models.CASCADE)
-    content = models.TextField()
+    content = models.TextField(null=True, blank=True)
     room = models.ForeignKey(Room, on_delete=models.CASCADE, related_name='messages', null=True)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='sent')
+    message_type = models.CharField(max_length=10, choices=MESSAGE_TYPES, default='text')
+    attachment = models.FileField(upload_to='chat_attachments/', null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ['created_at']
 
     def __str__(self):
-        return f"{self.user.username}: {self.content[:20]}"
+        desc = self.content[:20] if self.content else f"[{self.message_type} attachment]"
+        return f"{self.user.username}: {desc}"
 
 
 class MessageRead(models.Model):

@@ -260,6 +260,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
             'status': event.get('status', 'sent'),
             'room': self.room_id,
             'room_type': event.get('room_type'),
+            'message_type': event.get('message_type', 'text'),
+            'attachment': event.get('attachment'),
         }))
 
     async def status_update(self, event):
