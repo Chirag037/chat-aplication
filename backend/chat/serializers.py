@@ -39,7 +39,7 @@ class MessageSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Message
-        fields = ['id', 'user', 'username', 'content', 'room', 'status', 'created_at', 'seen_by', 'room_type', 'message_type', 'attachment']
+        fields = ['id', 'user', 'username', 'content', 'room', 'status', 'created_at', 'seen_by', 'room_type', 'message_type', 'attachment', 'duration']
 
     def get_seen_by(self, obj):
         if not obj.room or obj.room.type != 'group':

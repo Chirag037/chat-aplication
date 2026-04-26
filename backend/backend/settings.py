@@ -3,7 +3,7 @@ import os
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-change-me')
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY')
 
 DEBUG = os.getenv('DJANGO_DEBUG', 'true').lower() in ('1', 'true', 'yes', 'on')
 
@@ -16,6 +16,9 @@ else:
         "127.0.0.1",
         "*"
     ]
+
+
+SECRET_KEY = "1VQ6u9u1kQqesLbnU6Hci8o9YAZbMLis2I3gNPY8TxhugJ31me_1zA"
 
 CSRF_TRUSTED_ORIGINS = [
     'https://*.ngrok-free.app',
@@ -124,7 +127,8 @@ SIMPLE_JWT = {
     'REFRESH_TOKEN_LIFETIME': timedelta(days=14),
 }
 
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
+# STATICFILES_STORAGE is now defined within the STORAGES dictionary below
+
 
 
 # Serve Vue frontend

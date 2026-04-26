@@ -1,8 +1,11 @@
 import json
+import base64
+from django.core.files.base import ContentFile
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.contrib.auth.models import User
 from .models import Message, Room, MessageRead
+from .serializers import MessageSerializer
 
 class NotificationConsumer(AsyncWebsocketConsumer):
     async def connect(self):
@@ -139,19 +142,37 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
         if action == 'send':
             message_content = data.get('message')
-            if not message_content: return
-            saved_msg = await self.save_message(username, self.room_id, message_content)
+            attachment_data = data.get('attachment')
+            file_name = data.get('file_name')
+            message_type = data.get('message_type', 'text')
+            duration = data.get('duration')  # For voice messages
+
+            if not message_content and not attachment_data:
+                return
+
+            saved_msg = await self.save_message(
+                username, 
+                self.room_id, 
+                message_content, 
+                message_type, 
+                attachment_data, 
+                file_name,
+                duration
+            )
             
             # Broadcast message to the room
             await self.channel_layer.group_send(
                 self.room_group_name,
                 {
                     'type': 'chat_message',
-                    'message': message_content,
+                    'message': saved_msg['content'],
                     'username': username,
                     'created_at': saved_msg['created_at'],
                     'id': saved_msg['id'],
                     'room_type': saved_msg['room_type'],
+                    'message_type': saved_msg['message_type'],
+                    'attachment': saved_msg['attachment_url'],
+                    'duration': saved_msg.get('duration'),
                 }
             )
 
@@ -262,6 +283,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             'room_type': event.get('room_type'),
             'message_type': event.get('message_type', 'text'),
             'attachment': event.get('attachment'),
+            'duration': event.get('duration'),
         }))
 
     async def status_update(self, event):
@@ -296,14 +318,43 @@ class ChatConsumer(AsyncWebsocketConsumer):
         }))
 
     @database_sync_to_async
-    def save_message(self, username, room_id, content):
+    def save_message(self, username, room_id, content, message_type='text', attachment_data=None, file_name=None, duration=None):
         user = User.objects.get(username=username)
         room = Room.objects.get(id=room_id)
-        msg = Message.objects.create(user=user, room=room, content=content)
+        
+        msg = Message(
+            user=user, 
+            room=room, 
+            content=content, 
+            message_type=message_type,
+            duration=duration  # Store duration for voice messages
+        )
+
+        if attachment_data and file_name:
+            # Decode Base64 data
+            try:
+                # Remove header if present (e.g., data:image/png;base64,)
+                if ';base64,' in attachment_data:
+                    header, attachment_data = attachment_data.split(';base64,')
+                
+                decoded_file = base64.b64decode(attachment_data)
+                msg.attachment.save(file_name, ContentFile(decoded_file), save=False)
+            except Exception as e:
+                print(f"Error decoding attachment: {e}")
+
+        msg.save()
+        
+        # Use serializer to get the correct attachment URL
+        serializer = MessageSerializer(msg)
+        
         return {
             'id': msg.id,
+            'content': msg.content,
             'created_at': msg.created_at.isoformat(),
             'room_type': room.type,
+            'message_type': msg.message_type,
+            'attachment_url': serializer.data.get('attachment'),
+            'duration': msg.duration,
         }
 
     @database_sync_to_async

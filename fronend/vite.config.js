@@ -17,15 +17,25 @@ export default defineConfig({
 
   server: {
     host: '0.0.0.0',
-    allowedHosts: ['33e1-202-166-205-50.ngrok-free.app'],
+    allowedHosts: 'all',
     proxy: {
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,
+        secure: false,
+        timeout: 60000,
+        proxyTimeout: 60000,
+      },
+      '/media': {
+        target: 'http://localhost:9000',
+        changeOrigin: true,
+        secure: false,
       },
       '/ws': {
         target: 'ws://localhost:8000',
         ws: true,
+        changeOrigin: true,
+        secure: false,
       }
     }
   },

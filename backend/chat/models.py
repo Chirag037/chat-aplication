@@ -27,6 +27,7 @@ class Message(models.Model):
         ('image', 'Image'),
         ('video', 'Video'),
         ('file', 'File'),
+        ('voice', 'Voice'),
     )
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     content = models.TextField(null=True, blank=True)
@@ -34,6 +35,7 @@ class Message(models.Model):
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='sent')
     message_type = models.CharField(max_length=10, choices=MESSAGE_TYPES, default='text')
     attachment = models.FileField(upload_to='chat_attachments/', null=True, blank=True)
+    duration = models.IntegerField(null=True, blank=True, help_text="Duration in seconds")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

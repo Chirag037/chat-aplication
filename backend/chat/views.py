@@ -10,6 +10,24 @@ from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from .models import Message, Room, MessageRead
 from .serializers import RegisterSerializer, LoginSerializer, UserSerializer, RoomSerializer, MessageSerializer
+import requests
+import os
+import random
+
+Jokes = [
+    "Why don't programmers like nature? It has too many bugs.",
+    "Why was the computer cold? It left the window open.",
+    "Why do Java developers go broke? Because they used up all their cache.",
+    "Why did the developer quit his job? Because he didn't get arrays.",
+    "Why do programmers prefer dark mode? Because light attracts bugs."
+]
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def random_joke(request):
+    return Response({
+        "joke": random.choice(Jokes)
+    })
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
@@ -185,4 +203,62 @@ def messages(request):
         )
 
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+@api_view(['POST', 'GET'])
+@permission_classes([IsAuthenticated])
+def ai_proxy(request):
+    """Generic proxy for AssemblyAI requests to solve CORS and security issues."""
+    path = request.query_params.get('path', 'v2/llm/completions')
+    url = f'https://api.assemblyai.com/{path}'
+    
+    api_key = "5734a76428f8474ab5ac0b7bc8dac395"
+    
+    headers = {
+        'authorization': api_key,
+    }
+    
+    try:
+        if request.method == 'GET':
+            response = requests.get(url, headers=headers, timeout=60)
+        else:
+            # For POST requests
+            content_type = request.content_type
+            if content_type == 'application/octet-stream' or 'audio' in content_type:
+                # Handle binary file uploads
+                response = requests.post(url, data=request.body, headers=headers, timeout=120)
+            else:
+                # Handle JSON data
+                response = requests.post(url, json=request.data, headers=headers, timeout=60)
         
+        # Return JSON if possible, else raw text
+        try:
+            return Response(response.json(), status=response.status_code)
+        except:
+            return Response({'content': response.text, 'status': response.status_code}, status=response.status_code)
+            
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def ollama_proxy(request):
+    """Proxy for local Ollama requests."""
+    prompt = request.data.get('prompt')
+    model = request.data.get('model', 'llama3.2')
+    system_prompt = request.data.get('system', "You are a helpful chat assistant.")
+    
+    url = "http://localhost:11434/api/generate"
+    
+    payload = {
+        "model": model,
+        "prompt": prompt,
+        "system": system_prompt,
+        "stream": False
+    }
+    
+    try:
+        response = requests.post(url, json=payload, timeout=60)
+        return Response(response.json())
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
