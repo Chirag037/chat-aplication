@@ -8,11 +8,12 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
-from .models import Message, Room, MessageRead
-from .serializers import RegisterSerializer, LoginSerializer, UserSerializer, RoomSerializer, MessageSerializer
+from .models import Message, Room, MessageRead, AIConversation, AIMessage
+from .serializers import RegisterSerializer, LoginSerializer, UserSerializer, RoomSerializer, MessageSerializer, AIConversationSerializer
 import requests
 import os
 import random
+from requests.exceptions import RequestException
 
 Jokes = [
     "Why don't programmers like nature? It has too many bugs.",
@@ -262,3 +263,96 @@ def ollama_proxy(request):
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def ai_conversation(request):
+    conversation = AIConversation.objects.filter(user=request.user).order_by('-updated_at', '-id').first()
+    if not conversation:
+        conversation = AIConversation.objects.create(user=request.user, title='AI Chat')
+    serializer = AIConversationSerializer(conversation)
+    return Response(serializer.data)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def ai_chat(request):
+    prompt = (request.data.get('prompt') or '').strip()
+    model = request.data.get('model', 'llama3.2')
+    system_prompt = request.data.get('system', "You are a helpful chat assistant.")
+
+    if not prompt:
+        return Response({'error': 'prompt is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    conversation_id = request.data.get('conversation_id')
+    if conversation_id:
+        conversation = AIConversation.objects.filter(id=conversation_id, user=request.user).first()
+        if not conversation:
+            return Response({'error': 'Conversation not found'}, status=status.HTTP_404_NOT_FOUND)
+    else:
+        conversation = AIConversation.objects.filter(user=request.user).order_by('-updated_at', '-id').first()
+        if not conversation:
+            conversation = AIConversation.objects.create(user=request.user, title='AI Chat')
+
+    prior_messages = list(conversation.messages.order_by('created_at').values('role', 'content'))
+    context_lines = [f"{m['role']}: {m['content']}" for m in prior_messages[-8:]]
+    context_block = "\n".join(context_lines)
+    if len(context_block) > 3000:
+        context_block = context_block[-3000:]
+    combined_prompt = (
+        f"Conversation history:\n{context_block}\n\n"
+        f"Current user message:\n{prompt}\n\n"
+        "Reply as assistant based on prior context."
+    ) if context_block else prompt
+
+    url = "http://localhost:11434/api/generate"
+    primary_payload = {
+        "model": model,
+        "prompt": combined_prompt,
+        "system": system_prompt,
+        "stream": False
+    }
+    try:
+        response = requests.post(url, json=primary_payload, timeout=90)
+        response.raise_for_status()
+        llm_data = response.json()
+        assistant_text = llm_data.get('response') or llm_data.get('content') or llm_data.get('message') or ''
+        if not assistant_text:
+            return Response(
+                {
+                    'error': 'AI returned empty response',
+                    'model': model,
+                    'raw': llm_data,
+                },
+                status=status.HTTP_502_BAD_GATEWAY
+            )
+
+        AIMessage.objects.create(conversation=conversation, role='user', content=prompt)
+        AIMessage.objects.create(conversation=conversation, role='assistant', content=str(assistant_text))
+
+        serializer = AIConversationSerializer(conversation)
+        return Response({
+            'response': str(assistant_text),
+            'conversation': serializer.data
+        })
+    except RequestException as e:
+        return Response(
+            {
+                'error': 'Cannot reach Ollama or model request failed',
+                'detail': str(e),
+                'model': model,
+                'ollama_url': url,
+            },
+            status=status.HTTP_502_BAD_GATEWAY
+        )
+    except Exception as e:
+        return Response({'error': f'AI chat backend error: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def ai_new_conversation(request):
+    title = (request.data.get('title') or 'AI Chat').strip() or 'AI Chat'
+    conversation = AIConversation.objects.create(user=request.user, title=title)
+    serializer = AIConversationSerializer(conversation)
+    return Response(serializer.data, status=status.HTTP_201_CREATED)

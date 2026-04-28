@@ -8,83 +8,105 @@
     ></div>
 
     <!-- Sidebar Content -->
-    <div class="relative w-60 md:w-full h-full bg-slate-900 border-r border-slate-800 flex flex-col overflow-y-auto">
+    <div class="relative w-60 md:w-full h-full bg-gradient-to-b from-[#fff7ed] via-[#fff1e6] to-[#ffedd5] border-r border-amber-200/80 flex flex-col overflow-y-auto">
       
       <!-- Brand/Header -->
-      <div class="px-6 py-6 flex items-center gap-3">
-        <div class="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-lg">
-          <span class="text-slate-900 font-black text-sm">C</span>
+      <div class="px-5 py-5 flex items-center gap-3 border-b border-amber-200">
+        <div class="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm ring-1 ring-amber-200/60">
+          <span class="text-amber-950 font-extrabold text-sm">C</span>
         </div>
-        <h1 class="text-white font-bold text-sm tracking-[0.2em] uppercase">Workspace</h1>
+        <div class="min-w-0">
+          <h1 class="text-slate-900 font-semibold text-sm tracking-tight truncate">Workspace</h1>
+          <p class="text-amber-900/50 text-xs truncate">Chat</p>
+        </div>
       </div>
 
       <!-- Rooms Section -->
       <div class="px-3 mb-6">
-        <h3 class="px-4 mb-3 text-[9px] font-bold text-slate-500 uppercase tracking-[0.25em]">Channels</h3>
-        <div v-if="groupRooms.length === 0" class="px-4 py-2 text-[10px] text-slate-600 uppercase tracking-wider italic">None</div>
+        <h3 class="px-4 mb-2 text-[11px] font-semibold text-amber-900/60 uppercase tracking-wider">Channels</h3>
+        <div v-if="groupRooms.length === 0" class="px-4 py-2 text-xs text-slate-500 italic">No channels</div>
         <div
           v-for="room in groupRooms"
           :key="'g-' + room.id"
           :class="[
-            'group flex items-center px-4 py-2 rounded-lg cursor-pointer transition-all duration-200 mb-0.5',
-            activeRoomId == room.id ? 'bg-slate-800 text-white font-bold' : 'text-slate-500 hover:bg-slate-800/50 hover:text-slate-200'
+            'group relative flex items-center px-4 py-2 rounded-md cursor-pointer select-none transition-all duration-200 mb-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/40 active:scale-[0.99]',
+            activeRoomId == room.id ? 'bg-white text-slate-900 font-semibold shadow-sm ring-1 ring-amber-300/70' : 'text-slate-700 hover:bg-amber-100/60 hover:text-slate-900'
           ]"
           @click="selectGroupRoom(room)"
         >
-          <span :class="['w-4 text-[10px] font-bold mr-2 transition-colors', activeRoomId == room.id ? 'text-white' : 'text-slate-700 group-hover:text-slate-500']">#</span>
-          <span class="truncate text-[11px] uppercase tracking-wider">{{ room.name || `Session ${room.id}` }}</span>
+          <span v-if="activeRoomId == room.id" class="absolute left-1 top-1/2 -translate-y-1/2 h-5 w-1 rounded-full bg-gradient-to-b from-amber-500 to-rose-500"></span>
+          <span :class="['w-4 text-sm font-semibold mr-2 transition-colors', activeRoomId == room.id ? 'text-amber-700' : 'text-amber-700/45 group-hover:text-amber-700/70']">#</span>
+          <span class="truncate text-[13px] font-medium tracking-tight">{{ room.name || `Session ${room.id}` }}</span>
         </div>
       </div>
 
       <!-- Direct Messages Section -->
       <div class="px-3 mb-6">
-        <h3 class="px-4 mb-3 text-[9px] font-bold text-slate-500 uppercase tracking-[0.25em]">Direct</h3>
-        <div v-if="directRooms.length === 0" class="px-4 py-2 text-[10px] text-slate-600 uppercase tracking-wider italic">None</div>
+        <h3 class="px-4 mb-2 text-[11px] font-semibold text-amber-900/60 uppercase tracking-wider">Direct messages</h3>
+        <div v-if="directRooms.length === 0" class="px-4 py-2 text-xs text-slate-500 italic">No conversations</div>
         <div
           v-for="room in directRooms"
           :key="'d-' + room.id"
           :class="[
-            'group flex items-center px-4 py-2 rounded-lg cursor-pointer transition-all duration-200 mb-0.5',
-            activeRoomId == room.id ? 'bg-slate-800 text-white font-bold' : 'text-slate-500 hover:bg-slate-800/50 hover:text-slate-200'
+            'group relative flex items-center px-4 py-2 rounded-md cursor-pointer select-none transition-all duration-200 mb-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/40 active:scale-[0.99]',
+            activeRoomId == room.id ? 'bg-white text-slate-900 font-semibold shadow-sm ring-1 ring-amber-300/70' : 'text-slate-700 hover:bg-amber-100/60 hover:text-slate-900'
           ]"
           @click="selectRoom(room)"
         >
-          <div :class="['w-4 h-4 rounded-md flex items-center justify-center text-[8px] mr-3 font-black transition-colors', activeRoomId == room.id ? 'bg-white text-slate-900' : 'bg-slate-800 text-slate-500 group-hover:bg-slate-700']">
+          <span v-if="activeRoomId == room.id" class="absolute left-1 top-1/2 -translate-y-1/2 h-5 w-1 rounded-full bg-gradient-to-b from-amber-500 to-rose-500"></span>
+          <div :class="['w-7 h-7 rounded-md flex items-center justify-center text-xs mr-3 font-semibold transition-colors ring-1', activeRoomId == room.id ? 'bg-amber-50 text-amber-950 ring-amber-200' : 'bg-white/60 text-amber-900 ring-amber-200/60 group-hover:bg-white']">
             {{ getInitial(getRoomName(room)) }}
           </div>
-          <span class="truncate text-[11px] uppercase tracking-wider">{{ getRoomName(room) }}</span>
+          <span class="truncate text-[13px] font-medium tracking-tight">{{ getRoomName(room) }}</span>
         </div>
       </div>
 
       <!-- People Section -->
       <div class="px-3 mb-8">
-        <h3 class="px-4 mb-3 text-[9px] font-bold text-slate-500 uppercase tracking-[0.25em]">Teammates</h3>
-        <div v-if="users.length === 0" class="px-4 py-2 text-[10px] text-slate-600 uppercase tracking-wider italic">None</div>
+        <h3 class="px-4 mb-2 text-[11px] font-semibold text-amber-900/60 uppercase tracking-wider">People</h3>
+        <div v-if="users.length === 0" class="px-4 py-2 text-xs text-slate-500 italic">No users</div>
         <div
           v-for="user in users"
           :key="'u-' + user.id"
-          class="group flex items-center px-4 py-2 rounded-lg cursor-pointer text-slate-500 hover:bg-slate-800/50 hover:text-slate-200 transition-all duration-200 mb-0.5"
+          class="group flex items-center px-4 py-2 rounded-md cursor-pointer select-none text-slate-700 hover:bg-amber-100/60 hover:text-slate-900 transition-all duration-200 mb-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/40 active:scale-[0.99]"
           @click="startDirectChat(user.id)"
         >
-          <div class="w-4 h-4 rounded-md bg-slate-800 flex items-center justify-center text-[8px] mr-3 font-black text-slate-500 group-hover:bg-slate-700 transition-colors">
+          <div class="w-7 h-7 rounded-md bg-white/60 ring-1 ring-amber-200/60 flex items-center justify-center text-xs mr-3 font-semibold text-amber-900 group-hover:bg-white transition-colors">
             {{ getInitial(user.username) }}
           </div>
-          <span class="truncate text-[11px] uppercase tracking-wider">{{ user.username }}</span>
+          <span class="truncate text-[13px] font-medium tracking-tight">{{ user.username }}</span>
+        </div>
+      </div>
+
+      <!-- AI Section -->
+      <div class="px-3 mb-6">
+        <h3 class="px-4 mb-2 text-[11px] font-semibold text-amber-900/60 uppercase tracking-wider">AI</h3>
+        <div
+          class="group relative flex items-center px-4 py-2 rounded-md cursor-pointer select-none transition-all duration-200 mb-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/40 active:scale-[0.99] text-slate-700 hover:bg-amber-100/60 hover:text-slate-900"
+          @click="goToAI"
+        >
+          <span class="w-7 h-7 rounded-md bg-white/60 ring-1 ring-amber-200/60 flex items-center justify-center text-xs mr-3 font-semibold text-amber-900 group-hover:bg-white transition-colors">
+            AI
+          </span>
+          <span class="truncate text-[13px] font-medium tracking-tight">AI Chat</span>
         </div>
       </div>
 
       <!-- Current User Info -->
-      <div class="mt-auto p-4 bg-black/20">
-        <div class="flex items-center gap-3 px-2">
-          <div class="w-7 h-7 rounded-lg bg-white flex items-center justify-center text-slate-900 text-[10px] font-black">
+      <div class="mt-auto p-4 bg-gradient-to-b from-transparent to-amber-50/80 border-t border-amber-200/80">
+        <div class="rounded-lg border border-amber-200/80 bg-white/80 px-3 py-3 shadow-sm">
+          <div class="flex items-center justify-center gap-3">
+            <div class="w-9 h-9 rounded-md bg-amber-50 flex items-center justify-center text-amber-950 text-sm font-semibold ring-1 ring-amber-200/60">
             {{ getInitial(currentUser) }}
-          </div>
-          <div class="flex-1 min-w-0">
-            <p class="text-[10px] font-black text-white uppercase tracking-widest truncate">{{ currentUser }}</p>
-            <div class="flex items-center gap-1.5 mt-0.5">
-              <span class="w-1 h-1 bg-slate-500 rounded-full"></span>
-              <span class="text-[8px] font-bold text-slate-500 uppercase tracking-tighter">Authorized</span>
             </div>
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-semibold text-slate-900 truncate">{{ currentUser }}</p>
+              <div class="flex items-center gap-2 mt-0.5">
+                <span class="w-1.5 h-1.5 bg-amber-500 rounded-full"></span>
+                <span class="text-xs font-medium text-amber-900/60">Online</span>
+              </div>
+            </div>
+            <div class="w-2 h-2 rounded-full bg-amber-500/20 ring-1 ring-amber-500/20"></div>
           </div>
         </div>
       </div>
@@ -137,7 +159,8 @@ export default {
     },
     getRoomName(room) {
       if (room.type === 'direct') {
-        const other = room.participants.find(p => p.username !== this.currentUser);
+        const participants = Array.isArray(room.participants) ? room.participants : [];
+        const other = participants.find(p => p.username !== this.currentUser);
         return other ? other.username : 'Session';
       }
       return room.name || `Session ${room.id}`;
@@ -169,6 +192,10 @@ export default {
       } catch (error) {
         console.error('Session error:', error);
       }
+    },
+    goToAI() {
+      // Sidebar is used both in Chatview and AI view; routing is safe in both.
+      this.$router.push('/ai');
     }
   },
   mounted() {

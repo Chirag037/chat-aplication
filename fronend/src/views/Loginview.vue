@@ -1,8 +1,10 @@
 <template>
-  <div class="min-h-screen flex items-center justify-center bg-gray-900 relative overflow-hidden font-sans">
-    <!-- Subtle Professional Background -->
-    <div class="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(17,24,39,1)_0%,rgba(15,23,42,1)_100%)]"></div>
-    <div class="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
+  <div class="min-h-screen flex items-center justify-center bg-[#0b0f14] relative overflow-hidden font-sans">
+    <!-- Warm, professional animated background (no external assets) -->
+    <div class="login-bg absolute inset-0"></div>
+    <div class="absolute inset-0 bg-[radial-gradient(circle_at_18%_12%,rgba(245,158,11,0.18)_0%,rgba(11,15,20,0)_58%)]"></div>
+    <div class="absolute inset-0 bg-[radial-gradient(circle_at_82%_78%,rgba(251,113,133,0.12)_0%,rgba(11,15,20,0)_62%)]"></div>
+    <div class="absolute inset-0 opacity-[0.055] mix-blend-soft-light login-noise"></div>
 
     <div class="relative z-10 w-full px-4 py-8 flex justify-center">
       <div class="w-full max-w-md bg-slate-800/50 backdrop-blur-xl border border-white/5 rounded-2xl shadow-2xl p-8 md:p-10 transition-all duration-300">
@@ -192,6 +194,41 @@ export default {
 </script>
 
 <style scoped>
+.login-bg {
+  background:
+    radial-gradient(1200px circle at 18% 18%, rgba(217, 119, 6, 0.26), rgba(11, 15, 20, 0) 56%),
+    radial-gradient(900px circle at 82% 74%, rgba(225, 29, 72, 0.16), rgba(11, 15, 20, 0) 60%),
+    linear-gradient(180deg, #0b0f14 0%, #0f1720 55%, #0b0f14 100%);
+  background-size: 180% 180%;
+  animation: login-bg-drift 18s ease-in-out infinite;
+  will-change: background-position;
+}
+
+.login-noise {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='.55'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
+  animation: login-noise-shift 10s linear infinite;
+  will-change: background-position;
+}
+
+@keyframes login-bg-drift {
+  0% { background-position: 0% 0%; }
+  50% { background-position: 100% 80%; }
+  100% { background-position: 0% 0%; }
+}
+
+@keyframes login-noise-shift {
+  0% { background-position: 0 0; }
+  100% { background-position: 180px 180px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-bg,
+  .login-noise {
+    animation: none;
+  }
+}
+
 .fade-enter-active, .fade-leave-active {
   transition: opacity 0.5s ease;
 }

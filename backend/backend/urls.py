@@ -4,11 +4,14 @@ from django.views.generic import TemplateView
 from django.conf import settings
 from django.conf.urls.static import static
 from rest_framework_simplejwt.views import TokenObtainPairView  
-from chat.views import health_check, register, login, messages, list_users, room_list, create_direct_room, list_group_rooms, join_group_room, ai_proxy, random_joke, ollama_proxy
+from chat.views import health_check, register, login, messages, list_users, room_list, create_direct_room, list_group_rooms, join_group_room, ai_proxy, random_joke, ollama_proxy, ai_conversation, ai_chat, ai_new_conversation
 
 urlpatterns = [
     path('api/ai/proxy/', ai_proxy),
     path('api/ai/ollama/', ollama_proxy),
+    path('api/ai/conversation/', ai_conversation),
+    path('api/ai/conversation/new/', ai_new_conversation),
+    path('api/ai/chat/', ai_chat),
     path('admin/', admin.site.urls),
     path('api/health/', health_check),
     path('api/register/', register),

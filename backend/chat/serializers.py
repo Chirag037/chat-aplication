@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import Room, Message
+from .models import Room, Message, AIConversation, AIMessage
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -47,3 +47,17 @@ class MessageSerializer(serializers.ModelSerializer):
         return list(
             obj.reads.values_list('user__username', flat=True).order_by('read_at')
         )
+
+
+class AIMessageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AIMessage
+        fields = ['id', 'role', 'content', 'created_at']
+
+
+class AIConversationSerializer(serializers.ModelSerializer):
+    messages = AIMessageSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = AIConversation
+        fields = ['id', 'title', 'created_at', 'updated_at', 'messages']

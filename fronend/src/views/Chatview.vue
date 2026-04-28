@@ -12,28 +12,28 @@
     <div class="flex-1 flex flex-col min-w-0 bg-white overflow-hidden">
       
       <!-- Minimalist Header -->
-      <header class="h-14 flex items-center justify-between px-6 bg-white border-b border-slate-100 z-10 shrink-0">
+      <header class="h-14 flex items-center justify-between px-6 bg-gradient-to-r from-amber-50 via-rose-50 to-amber-50 border-b border-amber-100 z-10 shrink-0">
         <div class="flex items-center gap-3">
-          <button @click="isSidebarOpen = true" class="md:hidden p-2 -ml-2 text-slate-400 hover:bg-slate-50 rounded-lg transition-colors">
+          <button @click="isSidebarOpen = true" class="md:hidden p-2 -ml-2 text-amber-700 hover:bg-white/60 rounded-lg transition-colors">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
           </button>
           <div>
             <h2 class="text-sm font-bold text-slate-900 tracking-tight">{{ currentRoomName }}</h2>
             <div v-if="roomId" class="flex items-center gap-1.5 py-0.5">
-              <span class="w-1 h-1 bg-slate-200 rounded-full"></span>
-              <span class="text-[9px] font-bold text-slate-400 uppercase tracking-[0.15em]">Direct Message</span>
+              <span class="w-1.5 h-1.5 bg-amber-400 rounded-full"></span>
+              <span class="text-[9px] font-bold text-amber-800/70 uppercase tracking-[0.15em]">Direct Message</span>
             </div>
           </div>
         </div>
         
-        <div class="flex items-center gap-6">
-          <div class="hidden sm:flex items-center gap-3">
-            <span class="text-[10px] font-bold text-slate-300 uppercase tracking-widest">{{ currentUser }}</span>
-            <div class="w-7 h-7 bg-slate-50 border border-slate-100 rounded-lg flex items-center justify-center text-[10px] font-bold text-slate-400">
-              {{ getInitial(currentUser) }}
-            </div>
-          </div>
-          <button @click="logout" class="text-[10px] font-bold text-slate-400 hover:text-slate-900 uppercase tracking-widest transition-colors duration-200">
+	        <div class="flex items-center gap-6">
+	          <div class="hidden sm:flex items-center gap-3">
+	            <span class="text-[10px] font-bold text-amber-800/60 uppercase tracking-widest">{{ currentUser }}</span>
+	            <div class="w-7 h-7 bg-white/70 border border-amber-200/60 rounded-lg flex items-center justify-center text-[10px] font-bold text-amber-900">
+	              {{ getInitial(currentUser) }}
+	            </div>
+	          </div>
+          <button @click="logout" class="text-[10px] font-bold text-amber-800/70 hover:text-amber-950 uppercase tracking-widest transition-colors duration-200">
             Sign Out
           </button>
         </div>
@@ -458,9 +458,9 @@
     </Transition>
     
     <!-- Transcription Choice Modal -->
-    <Transition name="fade">
-      <div v-if="showTranscribeModal" class="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" @click="closeTranscribeModal">
-        <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden animate-in fade-in zoom-in duration-200" @click.stop>
+	    <Transition name="fade">
+	      <div v-if="showTranscribeModal" class="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" @click="closeTranscribeModal">
+	        <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden animate-in fade-in zoom-in duration-200" @click.stop>
           <div class="p-6">
             <h3 class="text-lg font-bold text-slate-900 mb-2">Transcribe Voice Message</h3>
             <p class="text-sm text-slate-500 mb-6 font-medium leading-relaxed">Choose your preferred transcription method. AI provides higher accuracy but requires an internet connection.</p>
@@ -493,19 +493,20 @@
           </div>
         </div>
       </div>
-    </Transition>
-  </div>
-</template>
+	    </Transition>
+
+		  </div>
+		</template>
 
 <script>
-import axios from 'axios';
-import api from '../api';
-import Sidebar from '../components/Sidebar.vue';
-
-export default {
-  components: { Sidebar },
-  data() {
-    return {
+		import axios from 'axios';
+		import api from '../api';
+		import Sidebar from '../components/Sidebar.vue';
+		
+		export default {
+		  components: { Sidebar },
+		  data() {
+		    return {
       messages: [],
       newMessage: "",
       currentUser: localStorage.getItem('username') || "Guest",
@@ -546,26 +547,32 @@ export default {
       assemblyAIKey: "5734a76428f8474ab5ac0b7bc8dac395",
       isProcessingAI: {},
       aiSummaries: {},
-      aiRephrased: {}
-    };
-  },
-  methods: {
-    getInitial(name) {
-      return name ? name.charAt(0).toUpperCase() : '?';
-    },
-    async handleRoomSelect(payload) {
+		      aiRephrased: {},
+      messagesByRoom: {},
+      fetchSequence: 0
+		    };
+		  },
+		  methods: {
+		    getInitial(name) {
+		      return name ? name.charAt(0).toUpperCase() : '?';
+		    },
+	    async handleRoomSelect(payload) {
       const room = typeof payload === 'object' ? payload : null;
-      const id = room ? room.id : payload;
+      const rawId = room ? room.id : payload;
+      const id = rawId != null ? String(rawId) : null;
+      if (!id) return;
       
       this.roomId = id;
       localStorage.setItem('last_room_id', id);
       this.isSidebarOpen = false;
-      this.fetchMessages();
+      this.messages = this.messagesByRoom[id] || [];
+      await this.fetchMessages(id);
       this.initWebSocket();
       
       if (room) {
         if (room.type === 'direct') {
-          const other = room.participants.find(p => p.username !== this.currentUser);
+          const participants = Array.isArray(room.participants) ? room.participants : [];
+          const other = participants.find(p => p.username !== this.currentUser);
           this.currentRoomName = other ? other.username : 'Private Session';
         } else {
           this.currentRoomName = room.name || `Session ${room.id}`;
@@ -581,7 +588,8 @@ export default {
           const foundRoom = allRooms.find(r => r.id == id);
           if (foundRoom) {
             if (foundRoom.type === 'direct') {
-              const other = foundRoom.participants.find(p => p.username !== this.currentUser);
+              const participants = Array.isArray(foundRoom.participants) ? foundRoom.participants : [];
+              const other = participants.find(p => p.username !== this.currentUser);
               this.currentRoomName = other ? other.username : 'Private Session';
             } else {
               this.currentRoomName = foundRoom.name || `Session ${foundRoom.id}`;
@@ -694,16 +702,20 @@ export default {
         setTimeout(this.initNotificationSocket, 3000);
       };
     },
-    async fetchMessages() {
-      if (!this.roomId) return;
+    async fetchMessages(targetRoomId = this.roomId) {
+      if (!targetRoomId) return;
+      const seq = ++this.fetchSequence;
       try {
-        const response = await api.get(`/api/messages/?room_id=${this.roomId}`);
-        this.messages = response.data.map(msg => {
+        const response = await api.get(`/api/messages/?room_id=${targetRoomId}`);
+        const normalizedMessages = response.data.map(msg => {
           if (msg.attachment) {
             msg.attachment = this.processMediaUrl(msg.attachment);
           }
           return msg;
         });
+        this.messagesByRoom[String(targetRoomId)] = normalizedMessages;
+        if (seq !== this.fetchSequence || String(targetRoomId) !== String(this.roomId)) return;
+        this.messages = normalizedMessages;
         this.$nextTick(this.scrollToBottom);
       } catch (error) {
         console.error("Communication error:", error);
@@ -1394,7 +1406,8 @@ export default {
     this.initNotificationSocket();
 
     if (this.roomId) {
-      await this.fetchMessages();
+      this.messages = this.messagesByRoom[String(this.roomId)] || [];
+      await this.fetchMessages(String(this.roomId));
       this.initWebSocket();
     }
   },
