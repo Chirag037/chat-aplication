@@ -43,8 +43,7 @@
       <!-- Direct Messages Section -->
       <div class="px-3 mb-6">
         <h3 class="px-4 mb-2 text-[11px] font-semibold text-amber-900/60 uppercase tracking-wider">Direct messages</h3>
-        <div v-if="directRooms.length === 0" class="px-4 py-2 text-xs text-slate-500 italic">No conversations</div>
-        <div
+                <div
           v-for="room in directRooms"
           :key="'d-' + room.id"
           :class="[

@@ -34,6 +34,9 @@
           <button @click="startNewConversation" class="text-[10px] font-bold text-indigo-700/80 hover:text-indigo-900 uppercase tracking-widest transition-colors duration-200">
             New Chat
           </button>
+          <button @click="deleteAllConversations" class="text-[10px] font-bold text-rose-700/80 hover:text-rose-900 uppercase tracking-widest transition-colors duration-200">
+            Delete Chat
+          </button>
           <button @click="goToChat" class="text-[10px] font-bold text-amber-800/70 hover:text-amber-950 uppercase tracking-widest transition-colors duration-200">
             Back to Chat
           </button>
@@ -126,6 +129,7 @@ export default {
       localStorage.setItem('last_room_id', id);
       this.isSidebarOpen = false;
       this.$router.push('/chat');
+      
     },
     async send() {
       const prompt = this.draft.trim();
@@ -141,9 +145,10 @@ export default {
         const res = await api.post('/api/ai/chat/', {
           model: 'llama3.2',
           prompt,
-          system: 'You are a helpful, concise assistant.',
+          system: 'you are a expert assistant.And expert in knowledge gathering',
           conversation_id: this.conversationId
         });
+
         const conversation = res?.data?.conversation;
         const text = res?.data?.response || '';
         if (conversation?.id) this.conversationId = conversation.id;
@@ -152,6 +157,7 @@ export default {
         } else {
           this.messages.push({ role: 'assistant', content: String(text || 'No response.') });
         }
+
       } catch (e) {
         const msg = e?.response?.data?.error || e?.message || 'Failed to reach Ollama.';
         this.error = String(msg);
@@ -190,6 +196,30 @@ export default {
         const msg = e?.response?.data?.error || e?.message || 'Failed to start a new conversation.';
         this.error = String(msg);
       } finally {
+        this.loading = false;
+        this.draft = '';
+        this.$nextTick(() => {
+          this.scrollToBottom();
+          // Force push to /ai to ensure component state is clean
+          if (this.$route.path !== '/ai') {
+            this.$router.push('/ai');
+          }
+        });
+      } 
+    },
+    async deleteAllConversations() {
+      if (!confirm('Are you sure you want to delete all AI conversations? This cannot be undone.')) return;
+      
+      this.error = '';
+      this.loading = true;
+      try {
+        await api.delete('/api/ai/conversation/delete-all/');
+        this.conversationId = null;
+        this.messages = [{ role: 'assistant', content: 'History cleared. Ask me anything!' }];
+      } catch (e) {
+        this.error = 'Failed to delete history.';
+      } finally {
+        this.loading = false;
         this.$nextTick(() => this.scrollToBottom());
       }
     },

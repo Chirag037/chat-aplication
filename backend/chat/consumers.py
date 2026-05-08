@@ -4,10 +4,12 @@ from django.core.files.base import ContentFile
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.contrib.auth.models import User
+# pyrefly: ignore [missing-import]
 from .models import Message, Room, MessageRead
+# pyrefly: ignore [missing-import]
 from .serializers import MessageSerializer
 
-class NotificationConsumer(AsyncWebsocketConsumer):
+class NotificationConsumer(AsyncWebsocketConsumer): 
     async def connect(self):
         self.user = self.scope['user']
         await self.accept()
@@ -20,9 +22,12 @@ class NotificationConsumer(AsyncWebsocketConsumer):
             )
 
     async def receive(self, text_data):
-        data = json.loads(text_data)
+        try:
+            data = json.loads(text_data)
+        except json.JSONDecodeError:
+            return
         action = data.get('action')
-        username = data.get('username')
+        username = data.get('username') or getattr(self.user, 'username', None)
 
         if action == 'join' and username:
             self.username = username
@@ -47,6 +52,15 @@ class NotificationConsumer(AsyncWebsocketConsumer):
 
         # For any non-join messages, require that the socket has identified itself.
         if not getattr(self, 'username', None):
+            return
+            
+        # Check user status
+        if not await self.is_user_active(self.username):
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'message': 'Your account is not active.'
+            }))
+            await self.close()
             return
             
     async def notify_delivery_check(self, event):
@@ -83,6 +97,14 @@ class NotificationConsumer(AsyncWebsocketConsumer):
         # Bulk update
         msgs_to_update.update(status='delivered')
         return affected_room_ids
+
+    @database_sync_to_async
+    def is_user_active(self, username):
+        try:
+            user = User.objects.get(username=username)
+            return user.profile.status == 'active'
+        except:
+            return False
 
 class ChatConsumer(AsyncWebsocketConsumer):
     async def confirm_user(self):
@@ -139,6 +161,15 @@ class ChatConsumer(AsyncWebsocketConsumer):
         if not getattr(self, 'username', None):
             return
         username = self.username
+
+        # Check user status
+        if not await self.is_user_active(username):
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'message': 'Your account is not active.'
+            }))
+            await self.close()
+            return
 
         if action == 'send':
             message_content = data.get('message')
@@ -227,6 +258,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
                             'username': username
                         }
                     )
+                    
             elif room_type == 'group':
                 # Bulk-create MessageRead entries for all unseen messages
                 results = await self.mark_all_group_messages_seen(username, self.room_id)
@@ -447,3 +479,11 @@ class ChatConsumer(AsyncWebsocketConsumer):
     def get_other_participants(self, current_username, room_id):
         room = Room.objects.get(id=room_id)
         return list(room.participants.exclude(username=current_username).values_list('username', flat=True))
+
+    @database_sync_to_async
+    def is_user_active(self, username):
+        try:
+            user = User.objects.get(username=username)
+            return user.profile.status == 'active'
+        except:
+            return False

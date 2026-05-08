@@ -61,6 +61,7 @@ class MessageRead(models.Model):
     def __str__(self):
         return f"{self.user.username} read msg {self.message_id}"
 
+
 class AIConversation(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='ai_conversations')
     title = models.CharField(max_length=255, default='AI Chat')
@@ -71,7 +72,7 @@ class AIConversation(models.Model):
         ordering = ['-updated_at']
 
     def __str__(self):
-        return f"{self.user.username} - {self.title}"
+        return f"{self.user.username}: {self.title}"
 
 
 class AIMessage(models.Model):
@@ -88,8 +89,28 @@ class AIMessage(models.Model):
         ordering = ['created_at']
 
     def __str__(self):
-        return f"{self.conversation_id} {self.role}: {self.content[:40]}"
+        return f"{self.role}: {self.content[:50]}"
 
+
+
+class UserProfile(models.Model):
+    STATUS_CHOICES = (
+        ('active', 'Active'),
+        ('suspended', 'Suspended'),
+        ('banned', 'Banned'),
+    )
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
+
+    def __str__(self):
+        return f"{self.user.username} - {self.status}"
+
+from django.db.models.signals import post_save
+
+@receiver(post_save, sender=User)
+def create_user_profile(sender, instance, created, **kwargs):
+    if created:
+        UserProfile.objects.get_or_create(user=instance)
 
 @receiver(post_delete, sender=User)
 def cleanup_orphaned_rooms(sender, instance, **kwargs):

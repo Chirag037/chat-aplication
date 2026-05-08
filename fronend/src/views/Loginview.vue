@@ -183,7 +183,7 @@ export default {
 
       } catch (error) {
         console.error('Submission error:', error)
-        this.message = error.response?.data?.error || error.response?.data?.message || 'Connection lost. Please try again.'
+       this.message = error.response?.data?.error || error.response?.data?.message || 'Connection lost. Please try again.'
         this.messageType = 'error'
       } finally {
         this.loading = false

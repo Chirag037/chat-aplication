@@ -1,19 +1,28 @@
+from django.http import JsonResponse
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
 from django.db.models import Count, Prefetch
 from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, authentication_classes, renderer_classes
+from rest_framework.exceptions import APIException
 from rest_framework.response import Response
+from rest_framework.renderers import JSONRenderer, BrowsableAPIRenderer, StaticHTMLRenderer
+from django.http import HttpResponse
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+# pyrefly: ignore [missing-import]
 from .models import Message, Room, MessageRead, AIConversation, AIMessage
+# pyrefly: ignore [missing-import]
 from .serializers import RegisterSerializer, LoginSerializer, UserSerializer, RoomSerializer, MessageSerializer, AIConversationSerializer
 import requests
+# pyrefly: ignore [missing-import]
+from .models import UserProfile
 import os
 import random
 from requests.exceptions import RequestException
+from rest_framework.response import Response
 
 Jokes = [
     "Why don't programmers like nature? It has too many bugs.",
@@ -35,6 +44,18 @@ def random_joke(request):
 def health_check(request):
     return Response({'status': 'ok'})
 
+
+# this is the health-1 api where text/html is allowed for testing
+@api_view(['GET'])
+@permission_classes([AllowAny])
+# @authentication_classes([])
+@renderer_classes([JSONRenderer, BrowsableAPIRenderer, StaticHTMLRenderer])
+def health_check_v1(request):
+    print(request.META.get('HTTP_ACCEPT', ''))
+    if 'text/html' in request.META.get('HTTP_ACCEPT', ''):
+        return HttpResponse('<h1>ok</h1>', content_type='text/html')
+    return Response({'status': 'ok'})
+
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def register(request):
@@ -53,6 +74,7 @@ def register(request):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@authentication_classes([])
 def login(request):
     serializer = LoginSerializer(data=request.data)
     if serializer.is_valid():
@@ -62,6 +84,17 @@ def login(request):
         user = authenticate(username=username, password=password)
 
         if user is not None:
+            try:
+                status_val = user.profile.status
+            except:
+                status_val = 'active' 
+
+            if status_val != 'active':
+                return Response(#your account is banned message 
+                    {"error": f"Your account is {status_val}."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
             refresh = RefreshToken.for_user(user)
             return Response({
                 "message": "login successful",
@@ -77,12 +110,61 @@ def login(request):
     error_msg = next(iter(serializer.errors.values()))[0]
     return Response({"error": error_msg}, status=status.HTTP_400_BAD_REQUEST)
 
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def moderate_user(request):
+    username = request.data.get('username')
+    new_status = request.data.get('status')
+    
+    if new_status not in ['active', 'suspended', 'banned']:
+        return Response({"error": "Invalid status."}, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        if username:
+            target_user = User.objects.get(username=username)
+        else:
+            return Response({"error": "username is required."}, status=status.HTTP_400_BAD_REQUEST)
+            
+        # profile xa ki nai check garne        
+        profile, created = UserProfile.objects.get_or_create(user=target_user)
+        
+        # Update 
+        profile.status = new_status
+        profile.save()
+        
+        if new_status == 'banned':
+            target_user.is_active = False
+        else:
+            target_user.is_active = True
+        target_user.save()
+        
+        return Response({
+            "message": f"User {target_user.username} status updated to {new_status}.",
+            "status": new_status,
+            "is_active": target_user.is_active
+        })
+    except User.DoesNotExist:
+        return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def list_users(request):
+    username = request.query_params.get('username')
+    email = request.query_params.get('email')
+    status_filter = request.query_params.get('status')
+    
     users = User.objects.exclude(id=request.user.id)
+    
+    if username:
+        users = users.filter(username__icontains=username)
+    if email:
+        users = users.filter(email__icontains=email)
+    if status_filter:
+        users = users.filter(profile__status=status_filter)
+        
     serializer = UserSerializer(users, many=True)
     return Response(serializer.data)
+    # return Response(serializer.data)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -237,6 +319,8 @@ def ai_proxy(request):
         except:
             return Response({'content': response.text, 'status': response.status_code}, status=response.status_code)
             
+    except APIException as e:
+        raise e
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -356,3 +440,9 @@ def ai_new_conversation(request):
     conversation = AIConversation.objects.create(user=request.user, title=title)
     serializer = AIConversationSerializer(conversation)
     return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def ai_delete_all_conversations(request):
+    AIConversation.objects.filter(user=request.user).delete()
+    return Response({'message': 'All AI conversations deleted'}, status=status.HTTP_200_OK)

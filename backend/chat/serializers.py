@@ -3,9 +3,10 @@ from django.contrib.auth.models import User
 from .models import Room, Message, AIConversation, AIMessage
 
 class UserSerializer(serializers.ModelSerializer):
+    status = serializers.CharField(source='profile.status', read_only=True)
     class Meta:
         model = User
-        fields = ['id', 'username']
+        fields = ['id', 'username', 'email', 'status', 'is_active']
 
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
